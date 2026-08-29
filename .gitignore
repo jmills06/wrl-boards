@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+
+# atomic-write temporaries; never committed
+data/latest/*.tmp
+
+# local discovery output
+discovery*.txt

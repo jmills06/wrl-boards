@@ -24,6 +24,7 @@ is absent from Microsoft Store installs of Python; `python` always works.
 Requires: pip install requests truststore
 """
 
+import argparse
 import json
 import math
 import os
@@ -39,6 +40,10 @@ truststore.inject_into_ssl()  # must happen before requests builds its SSL conte
 import requests  # noqa: E402  (deliberately after inject_into_ssl)
 
 # ---------------------------------------------------------------- constants
+
+# Bumped whenever the report changes, and printed in the header. A stale
+# download is otherwise indistinguishable from a run that found nothing.
+VERSION = "5 (reach + distance outliers)"
 
 BASE_URL = "https://api.worldradioleague.com"
 TIMEOUT = (10, 60)          # (connect, read) — never a bare float
@@ -211,6 +216,51 @@ def get(session, path, params=None):
         return body.get("data"), body.get("meta"), r
 
 
+# ---------------------------------------------------------------- auth
+
+def describe_key(key):
+    """Report the SHAPE of the key without revealing it.
+
+    Catches the usual copy-paste damage: placeholder text, smart quotes from a
+    web page, stray whitespace, invisible characters.
+    """
+    print(f"key  : {key[:9]}...{key[-4:]} ({len(key)} chars)")
+
+    problems = []
+    if not key.startswith("wrl_live_"):
+        problems.append(f"does not start with 'wrl_live_' (starts with {key[:9]!r})")
+    elif key.count("wrl_live_") > 1:
+        problems.append("the 'wrl_live_' prefix appears more than once — the key "
+                        "was probably pasted into a template that already had it")
+    if len(key) < 30:
+        problems.append(f"only {len(key)} chars — real keys are considerably longer")
+    if any(c in key for c in "<>"):
+        problems.append("contains < or > — looks like placeholder text was pasted literally")
+    if any(c.isspace() for c in key):
+        problems.append("contains whitespace inside the key")
+    non_ascii = sorted({c for c in key if not (32 <= ord(c) < 127)})
+    if non_ascii:
+        problems.append(f"contains non-ASCII characters: {non_ascii!r} "
+                        "(smart quotes or a hidden character from copy-paste?)")
+
+    if problems:
+        print("\n  ! the key does not look right:")
+        for p_ in problems:
+            print(f"    - {p_}")
+        print()
+    return not problems
+
+
+def apply_auth(session, key, style):
+    """WRL accepts either header. Set exactly one so the failure is unambiguous."""
+    session.headers.pop("Authorization", None)
+    session.headers.pop("X-API-Key", None)
+    if style == "bearer":
+        session.headers["Authorization"] = f"Bearer {key}"
+    else:
+        session.headers["X-API-Key"] = key
+
+
 # ---------------------------------------------------------------- step 1: /v1/me
 
 def step_me(session):
@@ -290,16 +340,20 @@ def step_logbooks(session):
 
 # ---------------------------------------------------------------- step 3: sample
 
-def fetch_sample(session, limit):
-    """Pull up to `limit` contacts via cursor paging. Returns (contacts, first_meta)."""
+def fetch_sample(session, limit=None):
+    """Pull contacts via cursor paging. `limit=None` pulls the entire log.
+
+    Returns (contacts, first_meta).
+    """
     contacts = []
     cursor = None
     first_meta = None
     page = 0
 
-    while len(contacts) < limit:
+    while limit is None or len(contacts) < limit:
         page += 1
-        params = {"limit": min(PAGE_SIZE, limit - len(contacts))}
+        want = PAGE_SIZE if limit is None else min(PAGE_SIZE, limit - len(contacts))
+        params = {"limit": want}
         if cursor:
             params["cursor"] = cursor  # opaque — pass back verbatim, never parse
 
@@ -314,8 +368,13 @@ def fetch_sample(session, limit):
         else:
             rows = []
 
-        print(f"  page {page}: {len(rows)} rows "
-              f"(X-Request-Id: {resp.headers.get('X-Request-Id')})")
+        if limit is None:
+            # Full pulls are long; one line per page would be pages of noise.
+            if page % 10 == 1 or not rows:
+                print(f"  page {page}: {len(rows)} rows, {len(contacts) + len(rows)} so far")
+        else:
+            print(f"  page {page}: {len(rows)} rows "
+                  f"(X-Request-Id: {resp.headers.get('X-Request-Id')})")
         contacts.extend(rows)
 
         cursor = (meta or {}).get("nextCursor")
@@ -343,15 +402,23 @@ def is_absent(v):
     return v is None or (isinstance(v, str) and not v.strip())
 
 
-def step_sample(session):
-    rule(f"STEP 3 — GET /v1/contacts (first {SAMPLE_SIZE})")
-    contacts, meta = fetch_sample(session, SAMPLE_SIZE)
+def step_sample(session, logbooks, full=False):
+    if full:
+        rule("STEP 3 — GET /v1/contacts (ENTIRE LOG)")
+        print("  paging until nextCursor is null; this may take a minute\n")
+        contacts, meta = fetch_sample(session, None)
+    else:
+        rule(f"STEP 3 — GET /v1/contacts (first {SAMPLE_SIZE})")
+        contacts, meta = fetch_sample(session, SAMPLE_SIZE)
     n = len(contacts)
     print(f"\n  pulled {n} contacts")
 
     if meta:
         print()
-        dump("raw meta of first page (look for a total count here)", meta)
+        dump("raw meta of first page", meta)
+        if isinstance(meta, dict) and "count" in meta and "total" not in meta:
+            print("\n  note: meta.count is the size of THIS PAGE, not the log total.")
+            print("        This API reports no log total; run with --full to count it.")
 
     if not contacts:
         print("  ! no contacts returned — nothing to profile")
@@ -412,13 +479,133 @@ def step_sample(session):
         print(f"    oldest : {lo.isoformat()}")
         print(f"    span   : {span} days for {n} contacts "
               f"({n / max(span, 1):.1f} QSO/day average)")
-        print(f"\n    (results are newest-first, so this is the trailing edge of the log)")
+        if not full:
+            print(f"\n    (newest-first, so this is the trailing edge of the log)")
     else:
         print("  ! no parseable timestamps in the sample")
     if unparsed:
         print(f"    ! {unparsed} contacts had a missing or unparseable timestamp")
 
+    # Year distribution is only meaningful over the whole log.
+    if full and stamps:
+        rule()
+        years = Counter(d.year for d in stamps)
+        print(f"  CONTACTS BY YEAR\n")
+        for y in sorted(years):
+            print(f"    {y}  {years[y]:6}")
+
+    if full:
+        report_reach(contacts)
+        report_distance_outliers(contacts)
+    report_logbooks(contacts, logbooks)
     return contacts, meta
+
+
+def report_reach(contacts):
+    """The headline numbers the career and grid boards actually display."""
+    rule()
+    grids4 = {str(c.get("gridsquare")).strip().upper()[:4]
+              for c in contacts if not is_absent(c.get("gridsquare"))
+              and len(str(c.get("gridsquare")).strip()) >= 4}
+    fields = {g[:2] for g in grids4}
+    entities = {c.get("dxcc") for c in contacts if c.get("dxcc") is not None}
+
+    lens = Counter(len(str(c.get("gridsquare")).strip())
+                   for c in contacts if not is_absent(c.get("gridsquare")))
+
+    print("  REACH — what the boards would display\n")
+    print(f"    unique grids (4-char)  : {len(grids4)}")
+    print(f"    unique fields (2-char) : {len(fields)} of 324")
+    print(f"    unique dxcc entities   : {len(entities)}")
+    print(f"\n    gridsquare precision actually stored:")
+    for ln, cnt in sorted(lens.items()):
+        print(f"      {ln} chars  {cnt:6}")
+    return grids4, entities
+
+
+def report_distance_outliers(contacts):
+    """How trustworthy is `distance` per-contact, not just in aggregate?
+
+    The median says kilometres beyond doubt, but records like "furthest
+    contact" are decided by a SINGLE row, so a handful of bad rows matters
+    far more there than it does to a median.
+    """
+    rule()
+    rows = []
+    for c in contacts:
+        d, g = c.get("distance"), c.get("gridsquare")
+        center = grid_center(g)
+        if d is None or center is None:
+            continue
+        try:
+            d = float(d)
+        except (TypeError, ValueError):
+            continue
+        mi = great_circle(QTH_LAT, QTH_LON, center[0], center[1], EARTH_RADIUS_MI)
+        if mi < 50:
+            continue
+        rows.append((d / mi, c, d, mi))
+
+    if not rows:
+        print("  DISTANCE OUTLIERS — nothing comparable")
+        return
+
+    KM = 1.0 / MI_PER_KM
+    bad = [r for r in rows if not (0.8 * KM <= r[0] <= 1.25 * KM)]
+    print(f"  DISTANCE OUTLIERS — rows more than 20-25% off the km ratio\n")
+    print(f"    {len(bad)} of {len(rows)} comparable rows ({pct(len(bad), len(rows)):.2f}%)")
+
+    # Does operating portable explain them? WRL computes from the QSO's own
+    # myGridsquare; we compare against a fixed home QTH.
+    def home(c):
+        mg = str(c.get("myGridsquare") or "").strip().upper()
+        return mg.startswith("EN82")
+
+    bad_away = sum(1 for r in bad if not home(r[1]))
+    all_away = sum(1 for r in rows if not home(r[1]))
+    print(f"    of those, {bad_away} were logged from a myGridsquare outside EN82")
+    print(f"    (across the whole set, {all_away} of {len(rows)} were outside EN82)")
+    if all_away:
+        print(f"    outlier rate away from EN82 : {pct(bad_away, all_away):.1f}%")
+    if len(rows) - all_away:
+        print(f"    outlier rate at home EN82   : "
+              f"{pct(len(bad) - bad_away, len(rows) - all_away):.1f}%")
+
+    print(f"\n    worst offenders:")
+    for ratio, c, d, mi in sorted(rows, key=lambda r: -abs(r[0] - KM))[:8]:
+        print(f"      {str(c.get('call')):10} their={str(c.get('gridsquare')):9} "
+              f"mine={str(c.get('myGridsquare') or '-'):9} "
+              f"api={d:10,.1f}  calc={mi:9,.1f}mi  ratio={ratio:8.2f}")
+
+    dists = [float(c["distance"]) for c in contacts
+             if c.get("distance") is not None]
+    if dists:
+        mx = max(dists)
+        print(f"\n    largest distance in log : {mx:,.1f} "
+              f"({mx * MI_PER_KM:,.1f} mi if km)")
+        if mx * MI_PER_KM > 12500:
+            print(f"      ! exceeds the ~12,450 mi antipodal maximum — that row is bad")
+
+
+def report_logbooks(contacts, logbooks):
+    """Which logbooks did an UNFILTERED /v1/contacts actually return?
+
+    This is not cosmetic. If the unfiltered read spans every logbook, then
+    "the default logbook" is not what the boards would be counting.
+    """
+    rule()
+    names = {}
+    for b in logbooks or []:
+        if isinstance(b, dict):
+            names[b.get("id")] = b.get("name")
+
+    dist = Counter(c.get("logbookId") for c in contacts)
+    n = len(contacts)
+    print(f"  LOGBOOKS PRESENT IN THIS UNFILTERED READ ({len(dist)} distinct)\n")
+    for lid, cnt in dist.most_common():
+        print(f"    {cnt:6}  {pct(cnt, n):5.1f}%  {names.get(lid, '(name unknown)')}")
+        print(f"            {lid}")
+    return dist
 
 
 # ---------------------------------------------------------------- step 4: distance unit
@@ -484,6 +671,30 @@ def step_distance(contacts):
     print(f"    median ratio    : {median:.4f}")
     print(f"    min / max ratio : {ratios[0]:.4f} / {ratios[-1]:.4f}")
 
+    # A 4-character grid is a ~100 mi cell, so the grid center can sit far from
+    # the real station. That error is a large FRACTION of a short path and a
+    # negligible one of a long path. If the unit is consistent, ratios must
+    # therefore converge as distance grows — which is a much stronger test than
+    # any single contact.
+    buckets = [(0, 500), (500, 1500), (1500, 3000), (3000, 99999)]
+    print(f"\n    ratio by path length (rounding error shrinks as distance grows)")
+    print(f"      {'range (mi)':>14}  {'n':>4}  {'median':>7}  {'spread':>7}")
+    for lo_mi, hi_mi in buckets:
+        grp = sorted(u["ratio"] for u in usable if lo_mi <= u["calc_mi"] < hi_mi)
+        if not grp:
+            continue
+        m = grp[len(grp) // 2] if len(grp) % 2 else (grp[len(grp)//2 - 1] + grp[len(grp)//2]) / 2
+        label = f"{lo_mi}-{hi_mi}" if hi_mi < 99999 else f"{lo_mi}+"
+        print(f"      {label:>14}  {len(grp):4}  {m:7.4f}  {grp[-1]-grp[0]:7.4f}")
+
+    # The longest paths are the most trustworthy evidence, so judge on those.
+    far_ratios = sorted(u["ratio"] for u in usable if u["calc_mi"] >= 1500)
+    if far_ratios:
+        fm = (far_ratios[len(far_ratios)//2] if len(far_ratios) % 2
+              else (far_ratios[len(far_ratios)//2 - 1] + far_ratios[len(far_ratios)//2]) / 2)
+        print(f"\n    median over paths >1500 mi: {fm:.4f}  ({len(far_ratios)} contacts)")
+        median = fm  # decide the verdict on the least noisy evidence
+
     if abs(median - 1.0) <= 0.05:
         verdict = "MILES"
         note = "distance is already in miles — use it as-is."
@@ -498,12 +709,12 @@ def step_distance(contacts):
         note = ("ratio matches neither 1.0 (miles) nor 1.609 (km). Do not trust "
                 "`distance`; consider computing it ourselves from gridsquare.")
 
-    spread = ratios[-1] - ratios[0]
+    spread = (far_ratios[-1] - far_ratios[0]) if far_ratios else (ratios[-1] - ratios[0])
     print(f"\n  >> VERDICT: {verdict}")
     print(f"     {note}")
     if spread > 0.15:
-        print(f"     ! ratio spread is {spread:.3f} — wider than grid-center rounding")
-        print(f"       explains. Some distances may be computed from a different")
+        print(f"     ! spread among LONG paths is {spread:.3f}, where grid-center")
+        print(f"       rounding should be small. Some distances may use a different")
         print(f"       origin than the QTH proxy (check myGridsquare).")
 
     return verdict
@@ -511,7 +722,7 @@ def step_distance(contacts):
 
 # ---------------------------------------------------------------- summary
 
-def summarize(me, resolution, logbooks, contacts, sample_meta, verdict):
+def summarize(me, resolution, logbooks, contacts, sample_meta, verdict, full=False):
     rule("SUMMARY — the open questions from the handoff")
 
     n = len(contacts)
@@ -524,19 +735,37 @@ def summarize(me, resolution, logbooks, contacts, sample_meta, verdict):
     print(f"\n  1. Is distance miles or kilometres?")
     print(f"     {verdict or 'UNRESOLVED — no contact had both distance and gridsquare'}")
 
+    scope = "the WHOLE LOG" if full else f"the trailing {n} contacts only"
     print(f"\n  2. How complete is gridsquare? (decides the map board)")
+    print(f"     Measured over {scope}.")
     print(f"     {grids}/{n} present ({pct(grids, n):.1f}%). "
           f"dxcc {pct(dxccs, n):.1f}%, distance {pct(dists, n):.1f}%.")
+    if not full:
+        print(f"     >> a trailing sample is a biased view of grid completeness.")
+        print(f"        Re-run with --full before deciding the map board's fate.")
     if pct(grids, n) < 60:
         print(f"     >> sparse. The grid map will be thin as designed — consider")
         print(f"        deriving approximate positions from dxcc, or dropping the board.")
 
     print(f"\n  3. Logbooks and default resolution")
     print(f"     resolution={resolution}, {len(logbooks)} logbook(s) visible.")
-    if resolution == "ambiguous":
-        print(f"     >> must decide: filter to one logbookId, or aggregate all.")
+
+    default_id = None
+    if isinstance(me, dict) and isinstance(me.get("defaultLogbook"), dict):
+        default_id = (me["defaultLogbook"].get("logbookId")
+                      or me["defaultLogbook"].get("id"))
+    seen = Counter(c.get("logbookId") for c in contacts)
+
+    if len(seen) > 1:
+        print(f"     >> the UNFILTERED read spans {len(seen)} logbooks, not just the")
+        print(f"        default. Boards built on it would count every logbook.")
+        print(f"        Decide deliberately: aggregate (pass no logbookId) or")
+        print(f"        filter (pass logbookId={default_id}).")
+    elif seen and default_id and default_id not in seen:
+        print(f"     >> the unfiltered read returned a logbook that is NOT the")
+        print(f"        default ({default_id}). Do not assume default scoping.")
     elif resolution in ("configured", "sole"):
-        print(f"     >> safe to rely on the default logbook; no logbookId needed.")
+        print(f"     >> unfiltered reads matched the default logbook in this sample.")
 
     print(f"\n  4. Enough distinct modes for the four-colour split?")
     print(f"     {len(modes)} distinct mode(s) in the sample.")
@@ -551,10 +780,20 @@ def summarize(me, resolution, logbooks, contacts, sample_meta, verdict):
     print(f"\n  5. Total QSO count / expected page count")
     total = None
     if isinstance(sample_meta, dict):
-        for k in ("total", "totalCount", "count", "totalItems"):
+        # NOT "count" — this API uses that for the page size, not the log total.
+        for k in ("total", "totalCount", "totalItems"):
             if isinstance(sample_meta.get(k), int):
                 total, total_key = sample_meta[k], k
                 break
+    if full:
+        pages = math.ceil(n / PAGE_SIZE)
+        print(f"     COUNTED DIRECTLY: {n:,} contacts across {pages} pages.")
+        print(f"     A nightly full pull is {pages} requests, ~{pages * PAGE_SLEEP:.0f}s "
+              f"of sleep plus request time.")
+        if pages > 100:
+            print(f"     >> over 100 requests. Inside 20,000 reads/day, and "
+                  f"PAGE_SLEEP={PAGE_SLEEP}s keeps it under 120 reads/min.")
+        total = None
     if total is not None:
         pages = math.ceil(total / PAGE_SIZE)
         print(f"     meta.{total_key} = {total:,} contacts -> {pages} pages of {PAGE_SIZE},")
@@ -562,10 +801,9 @@ def summarize(me, resolution, logbooks, contacts, sample_meta, verdict):
         if pages > 100:
             print(f"     >> {pages} requests in one run. Still inside 20,000 reads/day, but")
             print(f"        keep PAGE_SLEEP at {PAGE_SLEEP}s to stay under 120 reads/min.")
-    else:
-        print(f"     No total in meta. The full pull pages until nextCursor is null.")
-        print(f"     At {PAGE_SIZE} rows/page and {PAGE_SLEEP}s between pages, a 10k log is")
-        print(f"     ~100 requests and ~1 minute — well inside the 120/min read budget.")
+    elif not full:
+        print(f"     No total in meta — meta.count is the page size, not the log size.")
+        print(f"     Re-run with --full to count the log directly.")
 
     print(f"\n  This script wrote no files. Nothing to clean up.")
     print("=" * W)
@@ -573,7 +811,22 @@ def summarize(me, resolution, logbooks, contacts, sample_meta, verdict):
 
 # ---------------------------------------------------------------- main
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        description="Read-only discovery against the World Radio League API.")
+    ap.add_argument("--full", action="store_true",
+                    help="page the ENTIRE log instead of the first "
+                         f"{SAMPLE_SIZE} contacts. Answers the questions the "
+                         "trailing sample cannot: true log size, true field "
+                         "completeness, every mode and band ever used. Still "
+                         "writes nothing.")
+    args = ap.parse_args(argv)
+
+    if args.full:
+        print(f"(discover.py version {VERSION} — a --full run must print REACH "
+              f"and DISTANCE OUTLIERS sections; if it does not, the download "
+              f"was stale)")
+
     key = os.environ.get("WRL_API_KEY", "").strip()
     if not key:
         print("ERROR: WRL_API_KEY is not set.", file=sys.stderr)
@@ -588,33 +841,61 @@ def main():
 
     print("=" * W)
     print("WRL API DISCOVERY — read-only, writes no files")
+    print(f"ver  : {VERSION}")
     print(f"base : {BASE_URL}")
-    print(f"key  : {key[:9]}...{key[-4:]} ({len(key)} chars)")
+    describe_key(key)
     print(f"run  : {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
     print("=" * W)
 
     session = requests.Session()
     session.headers.update({
-        "Authorization": f"Bearer {key}",
         "Accept": "application/json",
         "User-Agent": "wrl-boards-discover/1.0 (K8JKU)",
     })
 
-    try:
-        me, resolution = step_me(session)
-    except ApiError as exc:
+    # The API documents both header styles. Try Bearer, fall back to X-API-Key,
+    # so a 401 tells us the key is wrong rather than the header being wrong.
+    me = resolution = None
+    last = None
+    for style in ("bearer", "x-api-key"):
+        apply_auth(session, key, style)
+        try:
+            me, resolution = step_me(session)
+            print(f"\n  (authenticated with {'Authorization: Bearer' if style == 'bearer' else 'X-API-Key'})")
+            break
+        except ApiError as exc:
+            last = exc
+            if exc.status in (401, 403) and style == "bearer":
+                print(f"  ! Bearer rejected ({exc.code}); retrying with the "
+                      f"X-API-Key header ...\n")
+                continue
+            break
+
+    if me is None:
+        exc = last
         print(f"\nFATAL: {exc}", file=sys.stderr)
         if exc.status in (401, 403):
-            print("  Authentication failed. Check WRL_API_KEY and that the "
-                  "membership is current.", file=sys.stderr)
+            print("  Both Authorization: Bearer and X-API-Key were rejected.",
+                  file=sys.stderr)
+            print("  That points at the key itself, not the request. Check:",
+                  file=sys.stderr)
+            print("    - the key is the full string from WRL Integrations > "
+                  "Developer API", file=sys.stderr)
+            print("    - it has not been regenerated since (that revokes the old one)",
+                  file=sys.stderr)
+            print("    - the WRL membership is current — the API needs a paid tier",
+                  file=sys.stderr)
+            print("    - nothing was truncated or auto-corrected when pasting",
+                  file=sys.stderr)
         if exc.request_id:
-            print(f"  X-Request-Id: {exc.request_id}", file=sys.stderr)
+            print(f"  X-Request-Id: {exc.request_id}  <- quote this to WRL support",
+                  file=sys.stderr)
         return 1
 
     logbooks = step_logbooks(session)
 
     try:
-        contacts, sample_meta = step_sample(session)
+        contacts, sample_meta = step_sample(session, logbooks, full=args.full)
     except ApiError as exc:
         print(f"\nFATAL: {exc}", file=sys.stderr)
         if exc.request_id:
@@ -622,7 +903,8 @@ def main():
         return 1
 
     verdict = step_distance(contacts) if contacts else None
-    summarize(me, resolution, logbooks, contacts, sample_meta, verdict)
+    summarize(me, resolution, logbooks, contacts, sample_meta, verdict,
+              full=args.full)
     return 0
 
 

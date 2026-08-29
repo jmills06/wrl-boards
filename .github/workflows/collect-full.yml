@@ -1,0 +1,86 @@
+name: Collect full log
+
+# No `schedule:` here on purpose. GitHub's built-in cron is unreliable and
+# skips runs under load. An external scheduler (cron-job.org) calls this via
+# the workflow_dispatch API instead, which fires on time.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: >-
+          Write the board files even if validation objects, e.g. after a
+          genuine mass deletion shrank the log by more than 10%.
+        type: boolean
+        default: false
+
+# Both collectors write the same files. Never let them overlap.
+concurrency:
+  group: wrl-collect
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          # Full history: the push step rebases onto whatever landed while
+          # this run was working, and a shallow clone cannot rebase.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Collect
+        env:
+          WRL_API_KEY: ${{ secrets.WRL_API_KEY }}
+        run: |
+          if [ -z "$WRL_API_KEY" ]; then
+            echo "::error::WRL_API_KEY secret is not set on this repository."
+            exit 1
+          fi
+          python collect.py --mode=full ${{ inputs.force && '--force' || '' }}
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Stage first, then compare the index: `git diff` alone reports
+          # nothing for a file that is new rather than modified.
+          git add data/latest
+          if git diff --cached --quiet; then
+            echo "No change in data/latest; nothing to commit."
+            exit 0
+          fi
+
+          git commit -m "Update board data (full) [skip ci]"
+
+          BRANCH="${GITHUB_REF_NAME}"
+          # Another run may have pushed while this one was collecting. Rebase
+          # onto it and retry rather than failing the run.
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${BRANCH}"; then
+              echo "Pushed on attempt ${attempt}."
+              exit 0
+            fi
+            echo "Push rejected on attempt ${attempt}; rebasing and retrying."
+            git pull --rebase --autostash -X theirs origin "${BRANCH}" || true
+            sleep $((attempt * 3))
+          done
+
+          echo "::error::Could not push after 5 attempts."
+          exit 1
