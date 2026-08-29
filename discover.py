@@ -211,6 +211,51 @@ def get(session, path, params=None):
         return body.get("data"), body.get("meta"), r
 
 
+# ---------------------------------------------------------------- auth
+
+def describe_key(key):
+    """Report the SHAPE of the key without revealing it.
+
+    Catches the usual copy-paste damage: placeholder text, smart quotes from a
+    web page, stray whitespace, invisible characters.
+    """
+    print(f"key  : {key[:9]}...{key[-4:]} ({len(key)} chars)")
+
+    problems = []
+    if not key.startswith("wrl_live_"):
+        problems.append(f"does not start with 'wrl_live_' (starts with {key[:9]!r})")
+    elif key.count("wrl_live_") > 1:
+        problems.append("the 'wrl_live_' prefix appears more than once — the key "
+                        "was probably pasted into a template that already had it")
+    if len(key) < 30:
+        problems.append(f"only {len(key)} chars — real keys are considerably longer")
+    if any(c in key for c in "<>"):
+        problems.append("contains < or > — looks like placeholder text was pasted literally")
+    if any(c.isspace() for c in key):
+        problems.append("contains whitespace inside the key")
+    non_ascii = sorted({c for c in key if not (32 <= ord(c) < 127)})
+    if non_ascii:
+        problems.append(f"contains non-ASCII characters: {non_ascii!r} "
+                        "(smart quotes or a hidden character from copy-paste?)")
+
+    if problems:
+        print("\n  ! the key does not look right:")
+        for p_ in problems:
+            print(f"    - {p_}")
+        print()
+    return not problems
+
+
+def apply_auth(session, key, style):
+    """WRL accepts either header. Set exactly one so the failure is unambiguous."""
+    session.headers.pop("Authorization", None)
+    session.headers.pop("X-API-Key", None)
+    if style == "bearer":
+        session.headers["Authorization"] = f"Bearer {key}"
+    else:
+        session.headers["X-API-Key"] = key
+
+
 # ---------------------------------------------------------------- step 1: /v1/me
 
 def step_me(session):
@@ -589,26 +634,53 @@ def main():
     print("=" * W)
     print("WRL API DISCOVERY — read-only, writes no files")
     print(f"base : {BASE_URL}")
-    print(f"key  : {key[:9]}...{key[-4:]} ({len(key)} chars)")
+    describe_key(key)
     print(f"run  : {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
     print("=" * W)
 
     session = requests.Session()
     session.headers.update({
-        "Authorization": f"Bearer {key}",
         "Accept": "application/json",
         "User-Agent": "wrl-boards-discover/1.0 (K8JKU)",
     })
 
-    try:
-        me, resolution = step_me(session)
-    except ApiError as exc:
+    # The API documents both header styles. Try Bearer, fall back to X-API-Key,
+    # so a 401 tells us the key is wrong rather than the header being wrong.
+    me = resolution = None
+    last = None
+    for style in ("bearer", "x-api-key"):
+        apply_auth(session, key, style)
+        try:
+            me, resolution = step_me(session)
+            print(f"\n  (authenticated with {'Authorization: Bearer' if style == 'bearer' else 'X-API-Key'})")
+            break
+        except ApiError as exc:
+            last = exc
+            if exc.status in (401, 403) and style == "bearer":
+                print(f"  ! Bearer rejected ({exc.code}); retrying with the "
+                      f"X-API-Key header ...\n")
+                continue
+            break
+
+    if me is None:
+        exc = last
         print(f"\nFATAL: {exc}", file=sys.stderr)
         if exc.status in (401, 403):
-            print("  Authentication failed. Check WRL_API_KEY and that the "
-                  "membership is current.", file=sys.stderr)
+            print("  Both Authorization: Bearer and X-API-Key were rejected.",
+                  file=sys.stderr)
+            print("  That points at the key itself, not the request. Check:",
+                  file=sys.stderr)
+            print("    - the key is the full string from WRL Integrations > "
+                  "Developer API", file=sys.stderr)
+            print("    - it has not been regenerated since (that revokes the old one)",
+                  file=sys.stderr)
+            print("    - the WRL membership is current — the API needs a paid tier",
+                  file=sys.stderr)
+            print("    - nothing was truncated or auto-corrected when pasting",
+                  file=sys.stderr)
         if exc.request_id:
-            print(f"  X-Request-Id: {exc.request_id}", file=sys.stderr)
+            print(f"  X-Request-Id: {exc.request_id}  <- quote this to WRL support",
+                  file=sys.stderr)
         return 1
 
     logbooks = step_logbooks(session)
