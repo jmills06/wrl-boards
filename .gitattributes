@@ -1,0 +1,7 @@
+# The collector writes LF. Keep it that way in the repo and in the working
+# copy, so a Windows checkout does not show every generated file as modified.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary

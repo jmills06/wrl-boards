@@ -58,6 +58,8 @@ PAGE_SLEEP = 0.5
 MEDIAN_MIN_SAMPLES = 5
 # Unique grids listed in the "newest grids" panel.
 NEWEST_GRIDS = 8
+# Great-circle arcs drawn on the map.
+ARC_COUNT = 6
 
 BASE_URL = "https://api.worldradioleague.com"
 TIMEOUT = (10, 60)            # (connect, read) — never a bare float
@@ -541,6 +543,38 @@ def build_grids(agg):
     home = agg.home_grid()
     home_c = grid_center(home) if home else None
 
+    # Arcs originate at the QSO's OWN myGridsquare, not a fixed home point.
+    # 7.8% of the log was worked portable, and an arc drawn from Michigan for
+    # a contact made from Florida is simply a wrong line on a map.
+    def arc_for(r):
+        a = grid_center(r["my_grid"])
+        b = grid_center(r["grid"]) or grid_center(r["grid4"])
+        if not a or not b or r["miles"] is None:
+            return None
+        return {"from": [a[1], a[0]], "to": [b[1], b[0]],
+                "call": r["call"], "miles": round(r["miles"])}
+
+    recent = [r for r in agg.rows if r["ts"] >= agg.fresh_cutoff]
+    recent.sort(key=lambda r: -(r["miles"] or 0))
+    arcs, seen_calls = [], set()
+    for r in recent:
+        a = arc_for(r)
+        if a and a["call"] not in seen_calls:
+            arcs.append(a)
+            seen_calls.add(a["call"])
+        if len(arcs) >= ARC_COUNT:
+            break
+    if len(arcs) < ARC_COUNT:
+        # A quiet month should still draw a map with arcs on it.
+        rest = sorted(agg.rows, key=lambda r: -(r["miles"] or 0))
+        for r in rest:
+            a = arc_for(r)
+            if a and a["call"] not in seen_calls:
+                arcs.append(a)
+                seen_calls.add(a["call"])
+            if len(arcs) >= ARC_COUNT:
+                break
+
     return {
         "generated": agg.now.isoformat(timespec="seconds"),
         "grid_count": len(agg.grids),
@@ -551,6 +585,7 @@ def build_grids(agg):
         "home": ({"grid": home, "lat": home_c[0], "lon": home_c[1]}
                  if home_c else None),
         "points": points,
+        "arcs": arcs,
         "median_distance": medians,
         "newest_grids": [
             {"grid": g, "call": call, "country": dxcc.country(code),
@@ -711,7 +746,9 @@ def report(agg, career, grids, recent):
     print(f"  longest streak      : {career['records']['longest_streak']} days")
     print(f"  bands / modes       : {len(career['bands'])} / {len(career['modes'])}")
     print(f"  map points          : {len(grids['points']):,}  "
-          f"fresh {sum(1 for p in grids['points'] if p['fresh'])}")
+          f"fresh {sum(1 for p in grids['points'] if p['fresh'])}  "
+          f"new in {FRESH_DAYS}d {grids['new_30d']}")
+    print(f"  map arcs            : {len(grids['arcs'])}")
     print(f"  recent today/week   : {recent['today']} / {recent['week']}")
 
     unknown = sorted({m["mode"] for m in career["modes"]
