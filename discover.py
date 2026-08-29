@@ -11,9 +11,17 @@ Answers the open questions in the handoff before we design the collector:
 This script WRITES NOTHING. It only GETs and prints.
 
 Usage:
-    set WRL_API_KEY=wrl_live_...      (Windows)
-    export WRL_API_KEY=wrl_live_...   (bash)
-    py discover.py
+    PowerShell:  $env:WRL_API_KEY = "wrl_live_..."
+    cmd.exe:     set WRL_API_KEY=wrl_live_...
+    bash:        export WRL_API_KEY=wrl_live_...
+
+    then, from the repo directory:  python discover.py
+
+Note for Windows: `set` is an alias for Set-Variable in PowerShell and will
+NOT set an environment variable there — use $env: as shown. The `py` launcher
+is absent from Microsoft Store installs of Python; `python` always works.
+
+Requires: pip install requests truststore
 """
 
 import json
@@ -569,8 +577,13 @@ def main():
     key = os.environ.get("WRL_API_KEY", "").strip()
     if not key:
         print("ERROR: WRL_API_KEY is not set.", file=sys.stderr)
-        print("  bash:    export WRL_API_KEY=wrl_live_...", file=sys.stderr)
-        print("  Windows: set WRL_API_KEY=wrl_live_...", file=sys.stderr)
+        print('  PowerShell: $env:WRL_API_KEY = "wrl_live_..."', file=sys.stderr)
+        print("  cmd.exe:    set WRL_API_KEY=wrl_live_...", file=sys.stderr)
+        print("  bash:       export WRL_API_KEY=wrl_live_...", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("  In PowerShell, `set` is an alias for Set-Variable and does not",
+              file=sys.stderr)
+        print("  set environment variables. Use the $env: form above.", file=sys.stderr)
         return 2
 
     print("=" * W)
