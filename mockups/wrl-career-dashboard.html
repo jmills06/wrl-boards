@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WRL Career Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Source+Sans+Pro:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#152333; --navy-d:#0d1620; --navy-l:#1e3347;
+  --orange:#ff7030; --cream:#fdf8e5;
+  --c80:rgba(253,248,229,.80); --c50:rgba(253,248,229,.50); --c30:rgba(253,248,229,.30);
+  --card:rgba(255,255,255,.05); --line:rgba(255,255,255,.10);
+  --cw:#4a90e2; --ssb:#ff7030; --fm:#9b59b6; --dig:#2ecc71; --gold:#E0A52E;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#000;overflow:hidden;height:100%}
+#fit{position:absolute;top:0;left:0;transform-origin:top left}
+#board{
+  width:1080px;height:1920px;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,var(--navy-d) 0%,var(--navy) 45%,var(--navy-l) 100%);
+  color:var(--cream);font-family:'Source Sans Pro',sans-serif;
+  padding:36px 40px;display:flex;flex-direction:column;gap:20px;
+}
+#board::before,#board::after{
+  content:'';position:absolute;width:640px;height:640px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(255,112,48,.13) 0%,rgba(255,112,48,0) 70%);
+}
+#board::before{top:-260px;left:-240px}
+#board::after{bottom:-280px;right:-260px}
+.z{position:relative;z-index:2}
+
+.hdr{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid var(--orange);padding-bottom:16px}
+.call{font-family:'Oswald',sans-serif;font-weight:700;font-size:74px;line-height:.9;letter-spacing:1px}
+.sub{font-family:'Oswald',sans-serif;font-weight:400;font-size:20px;letter-spacing:5px;text-transform:uppercase;color:var(--orange);margin-top:8px}
+.hdr-r{text-align:right}
+.hdr-r .t{font-family:'Oswald',sans-serif;font-size:46px;font-weight:300;line-height:1}
+.hdr-r .d{font-size:17px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50);margin-top:6px}
+
+.hero{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px 32px;display:flex;align-items:center;justify-content:space-between}
+.hero .big{font-family:'Oswald',sans-serif;font-weight:300;font-size:128px;line-height:.82;letter-spacing:-2px}
+.hero .lbl{font-size:16px;letter-spacing:4px;text-transform:uppercase;color:var(--c50);margin-top:10px}
+.since{text-align:right;font-size:17px;color:var(--c80);line-height:1.7}
+.since b{font-family:'Oswald',sans-serif;font-weight:500;font-size:30px;color:var(--orange);display:block;line-height:1.1}
+
+.sh{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.sh span{font-family:'Oswald',sans-serif;font-size:19px;font-weight:500;letter-spacing:4px;text-transform:uppercase;color:var(--orange);white-space:nowrap}
+.sh i{flex:1;height:1px;background:linear-gradient(90deg,rgba(255,112,48,.55),rgba(255,112,48,0))}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 16px;text-align:center}
+.stat .n{font-family:'Oswald',sans-serif;font-weight:400;font-size:56px;line-height:1}
+.stat .n small{font-size:24px;color:var(--c50);font-weight:300}
+.stat .l{font-size:13px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50);margin-top:6px}
+.stat.odo .n{color:var(--gold)}
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px}
+
+.band{display:grid;grid-template-columns:52px 1fr 68px;align-items:center;gap:10px;margin-bottom:11px}
+.band:last-child{margin-bottom:0}
+.band .bn{font-family:'Oswald',sans-serif;font-size:20px;color:var(--c80);text-align:right}
+.band .tr{height:14px;background:rgba(255,255,255,.06);border-radius:7px;overflow:hidden}
+.band .fl{height:100%;background:var(--orange);border-radius:7px}
+.band .bv{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c50);text-align:right}
+
+.mbar{display:flex;height:34px;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.mleg{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.mleg div{display:flex;align-items:center;gap:9px;font-size:16px;color:var(--c80)}
+.dot{width:12px;height:12px;border-radius:3px;flex:none}
+.mleg b{margin-left:auto;font-family:'Oswald',sans-serif;font-weight:400;color:var(--cream)}
+
+.rec{display:flex;align-items:baseline;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.rec:last-child{border-bottom:none;padding-bottom:0}
+.rec .k{font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50)}
+.rec .v{font-family:'Oswald',sans-serif;font-size:28px;font-weight:500}
+.rec .v em{font-style:normal;font-size:16px;color:var(--c50);margin-left:8px;font-weight:300}
+.gold{color:var(--gold)}
+
+/* heatmap */
+#heat{display:grid;grid-template-columns:54px repeat(24,1fr);gap:4px;align-items:center}
+#heat .hb{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c80);text-align:right;padding-right:6px}
+#heat .cell{height:38px;border-radius:4px;background:rgba(255,255,255,.045)}
+#heat .hh{font-family:'Oswald',sans-serif;font-size:14px;color:var(--c50);text-align:center;padding-top:4px}
+.hkey{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-top:12px;font-size:14px;
+  letter-spacing:2px;text-transform:uppercase;color:var(--c50)}
+.hkey i{width:26px;height:12px;border-radius:3px;display:inline-block}
+
+.yrs{display:flex;align-items:flex-end;gap:11px;height:120px;padding-top:6px}
+.yr{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.yr .b{width:100%;background:rgba(255,112,48,.35);border-radius:5px 5px 0 0}
+.yr.now .b{background:var(--orange)}
+.yr .y{font-family:'Oswald',sans-serif;font-size:15px;color:var(--c50);margin-top:8px}
+.yr .c{font-family:'Oswald',sans-serif;font-size:15px;color:var(--c80);margin-bottom:5px}
+
+.ftr{margin-top:auto;display:flex;justify-content:space-between;align-items:center;
+  font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c30);
+  border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div id="fit"><div id="board">
+
+  <div class="hdr z">
+    <div>
+      <div class="call">K8JKU</div>
+      <div class="sub">Station log &middot; career</div>
+    </div>
+    <div class="hdr-r">
+      <div class="t">14:32<span style="font-size:22px;color:var(--c50)"> UTC</span></div>
+      <div class="d">Fri 28 Aug 2026</div>
+    </div>
+  </div>
+
+  <div class="hero z">
+    <div>
+      <div class="big">6,142</div>
+      <div class="lbl">Contacts logged</div>
+    </div>
+    <div class="since">
+      <b>2,847</b> logged this year<br>
+      <span style="color:var(--c50)">First QSO 04 Mar 2019</span>
+    </div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>Reach</span><i></i></div>
+    <div class="stats">
+      <div class="stat"><div class="n">137</div><div class="l">DXCC</div></div>
+      <div class="stat"><div class="n">741</div><div class="l">Grids</div></div>
+      <div class="stat"><div class="n">6<small>/7</small></div><div class="l">Continents</div></div>
+      <div class="stat odo"><div class="n">38.4<small>M</small></div><div class="l">Miles worked</div></div>
+    </div>
+  </div>
+
+  <div class="cols z">
+    <div class="panel">
+      <div class="sh"><span>Bands</span><i></i></div>
+      <div class="band"><div class="bn">20m</div><div class="tr"><div class="fl" style="width:100%"></div></div><div class="bv">2,010</div></div>
+      <div class="band"><div class="bn">40m</div><div class="tr"><div class="fl" style="width:69%"></div></div><div class="bv">1,388</div></div>
+      <div class="band"><div class="bn">15m</div><div class="tr"><div class="fl" style="width:40%"></div></div><div class="bv">812</div></div>
+      <div class="band"><div class="bn">17m</div><div class="tr"><div class="fl" style="width:32%"></div></div><div class="bv">640</div></div>
+      <div class="band"><div class="bn">10m</div><div class="tr"><div class="fl" style="width:25%"></div></div><div class="bv">512</div></div>
+      <div class="band"><div class="bn">30m</div><div class="tr"><div class="fl" style="width:17%"></div></div><div class="bv">344</div></div>
+      <div class="band"><div class="bn">80m</div><div class="tr"><div class="fl" style="width:14%"></div></div><div class="bv">288</div></div>
+      <div class="band"><div class="bn">6m</div><div class="tr"><div class="fl" style="width:7%"></div></div><div class="bv">148</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="sh"><span>Modes</span><i></i></div>
+      <div class="mbar">
+        <div style="width:45%;background:var(--dig)"></div>
+        <div style="width:27%;background:var(--ssb)"></div>
+        <div style="width:20%;background:var(--cw)"></div>
+        <div style="width:8%;background:var(--fm)"></div>
+      </div>
+      <div class="mleg">
+        <div><i class="dot" style="background:var(--dig)"></i>FT8<b>2,740</b></div>
+        <div><i class="dot" style="background:var(--ssb)"></i>SSB<b>1,690</b></div>
+        <div><i class="dot" style="background:var(--cw)"></i>CW<b>1,210</b></div>
+        <div><i class="dot" style="background:var(--fm)"></i>FM<b>318</b></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="sh"><span>Records</span><i></i></div>
+      <div class="rec"><div class="k">Furthest</div><div class="v gold">11,284<em>mi &middot; VK6ANC</em></div></div>
+      <div class="rec"><div class="k">Best day</div><div class="v gold">118<em>QSOs &middot; 24 Oct 2023</em></div></div>
+      <div class="rec"><div class="k">Longest streak</div><div class="v">41<em>days</em></div></div>
+    </div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>When you operate &middot; UTC hour by band</span><i></i></div>
+    <div id="heat"></div>
+    <div class="hkey">
+      <span>Fewer</span>
+      <i style="background:rgba(255,255,255,.045)"></i>
+      <i style="background:rgba(255,112,48,.28)"></i>
+      <i style="background:rgba(255,112,48,.55)"></i>
+      <i style="background:rgba(255,112,48,.82)"></i>
+      <i style="background:#ff7030"></i>
+      <span>More</span>
+    </div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>Contacts by year</span><i></i></div>
+    <div class="yrs">
+      <div class="yr"><div class="c">312</div><div class="b" style="height:16%"></div><div class="y">2019</div></div>
+      <div class="yr"><div class="c">488</div><div class="b" style="height:25%"></div><div class="y">2020</div></div>
+      <div class="yr"><div class="c">602</div><div class="b" style="height:31%"></div><div class="y">2021</div></div>
+      <div class="yr"><div class="c">744</div><div class="b" style="height:38%"></div><div class="y">2022</div></div>
+      <div class="yr"><div class="c">981</div><div class="b" style="height:50%"></div><div class="y">2023</div></div>
+      <div class="yr"><div class="c">1,204</div><div class="b" style="height:62%"></div><div class="y">2024</div></div>
+      <div class="yr"><div class="c">1,964</div><div class="b" style="height:100%"></div><div class="y">2025</div></div>
+      <div class="yr now"><div class="c">2,847</div><div class="b" style="height:78%"></div><div class="y">2026</div></div>
+    </div>
+  </div>
+
+  <div class="ftr z">
+    <div>World Radio League &middot; default logbook</div>
+    <div>Synced 14:28 UTC</div>
+  </div>
+
+</div></div>
+<script>
+var AUTO_FIT = true;
+function fit(){
+  if(!AUTO_FIT) return;
+  var s = Math.min(innerWidth/1080, innerHeight/1920);
+  var f = document.getElementById('fit');
+  f.style.transform = 'scale('+s+')';
+  f.style.left = ((innerWidth - 1080*s)/2)+'px';
+}
+addEventListener('resize', fit); fit();
+
+/* ---- Sample heatmap data: rows = band, cols = UTC hour 0..23, values = QSO count ---- */
+var HEAT = {
+  '10m':[0,0,0,0,0,0,0,0,0,0,0,2,6,14,26,38,44,41,29,12,3,0,0,0],
+  '15m':[0,0,0,0,0,0,0,0,0,1,4,12,24,41,58,66,71,60,38,17,5,1,0,0],
+  '17m':[1,0,0,0,0,0,0,0,0,2,6,15,28,44,52,55,49,40,26,12,4,2,1,0],
+  '20m':[8,4,2,1,1,1,2,4,9,18,34,58,88,124,151,168,159,138,104,71,44,26,16,11],
+  '30m':[14,11,7,4,3,3,4,6,8,10,12,14,17,20,22,24,26,29,33,38,36,28,22,18],
+  '40m':[62,54,41,28,19,14,11,9,8,7,7,8,10,13,17,22,29,41,58,79,94,88,78,70],
+  '80m':[41,48,52,44,31,22,14,8,4,2,1,1,1,2,3,4,6,9,14,21,29,34,38,40],
+  '6m':[0,0,0,0,0,0,0,0,0,0,0,1,3,7,12,16,14,9,4,1,0,0,0,0]
+};
+(function(){
+  var el = document.getElementById('heat'), h = '';
+  var max = 0;
+  Object.keys(HEAT).forEach(function(b){ HEAT[b].forEach(function(v){ if(v>max) max=v; }); });
+  Object.keys(HEAT).forEach(function(b){
+    h += '<div class="hb">'+b+'</div>';
+    HEAT[b].forEach(function(v){
+      var bg = 'rgba(255,255,255,.045)';
+      if(v>0){
+        var r = Math.pow(v/max, 0.55);
+        bg = r>0.92 ? '#ff7030' : 'rgba(255,112,48,'+(0.14+r*0.72).toFixed(3)+')';
+      }
+      h += '<div class="cell" style="background:'+bg+'"></div>';
+    });
+  });
+  h += '<div></div>';
+  for(var i=0;i<24;i++){ h += '<div class="hh">'+(i%3===0 ? String(i).padStart(2,'0') : '')+'</div>'; }
+  el.innerHTML = h;
+})();
+</script>
+</body>
+</html>

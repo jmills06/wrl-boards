@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WRL Recent Activity</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Source+Sans+Pro:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#152333; --navy-d:#0d1620; --navy-l:#1e3347;
+  --orange:#ff7030; --cream:#fdf8e5;
+  --c80:rgba(253,248,229,.80); --c50:rgba(253,248,229,.50); --c30:rgba(253,248,229,.30);
+  --card:rgba(255,255,255,.05); --line:rgba(255,255,255,.10);
+  --cw:#4a90e2; --ssb:#ff7030; --fm:#9b59b6; --dig:#2ecc71; --gold:#E0A52E;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#000;overflow:hidden;height:100%}
+#fit{position:absolute;top:0;left:0;transform-origin:top left}
+#board{
+  width:1080px;height:1920px;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,var(--navy-d) 0%,var(--navy) 45%,var(--navy-l) 100%);
+  color:var(--cream);font-family:'Source Sans Pro',sans-serif;
+  padding:36px 40px;display:flex;flex-direction:column;gap:18px;
+}
+#board::before,#board::after{
+  content:'';position:absolute;width:620px;height:620px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(255,112,48,.13) 0%,rgba(255,112,48,0) 70%);
+}
+#board::before{top:-250px;right:-220px}
+#board::after{bottom:-280px;left:-250px}
+.z{position:relative;z-index:2}
+
+.hdr{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid var(--orange);padding-bottom:16px}
+.call{font-family:'Oswald',sans-serif;font-weight:700;font-size:74px;line-height:.9}
+.sub{font-family:'Oswald',sans-serif;font-weight:400;font-size:20px;letter-spacing:5px;text-transform:uppercase;color:var(--orange);margin-top:8px}
+.hdr-r{text-align:right}
+.hdr-r .t{font-family:'Oswald',sans-serif;font-size:46px;font-weight:300;line-height:1}
+.hdr-r .d{font-size:17px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50);margin-top:6px}
+
+.sh{display:flex;align-items:center;gap:16px;margin-bottom:11px}
+.sh span{font-family:'Oswald',sans-serif;font-size:19px;font-weight:500;letter-spacing:4px;text-transform:uppercase;color:var(--orange);white-space:nowrap}
+.sh i{flex:1;height:1px;background:linear-gradient(90deg,rgba(255,112,48,.55),rgba(255,112,48,0))}
+
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 24px}
+.tile.hot{border-color:rgba(255,112,48,.55);background:linear-gradient(145deg,rgba(255,112,48,.16),rgba(255,112,48,.04))}
+.tile .n{font-family:'Oswald',sans-serif;font-weight:300;font-size:80px;line-height:.85}
+.tile .l{font-size:14px;letter-spacing:3px;text-transform:uppercase;color:var(--c50);margin-top:8px}
+
+.days{display:flex;align-items:flex-end;gap:14px;height:168px}
+.day{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.day .c{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c80);margin-bottom:6px}
+.day .b{width:100%;background:rgba(255,112,48,.32);border-radius:6px 6px 0 0;min-height:4px}
+.day.today .b{background:var(--orange)}
+.day .l{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:1px;text-transform:uppercase;color:var(--c50);margin-top:8px}
+.day.today .l{color:var(--orange)}
+
+/* 24 hour strip */
+#hours{display:grid;grid-template-columns:repeat(24,1fr);gap:5px;align-items:end;height:78px}
+#hours .hb{background:rgba(255,112,48,.30);border-radius:4px 4px 0 0;min-height:3px}
+#hours .hb.now{background:var(--orange)}
+#hlab{display:grid;grid-template-columns:repeat(24,1fr);gap:5px;margin-top:7px}
+#hlab div{font-family:'Oswald',sans-serif;font-size:14px;color:var(--c50);text-align:center}
+
+.log{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:96px 210px 1fr 122px 112px;align-items:center;gap:12px;
+  background:var(--card);border:1px solid var(--line);border-left:6px solid var(--c30);
+  border-radius:0 12px 12px 0;padding:11px 18px}
+.row.m-cw{border-left-color:var(--cw)} .row.m-ssb{border-left-color:var(--ssb)}
+.row.m-fm{border-left-color:var(--fm)} .row.m-dig{border-left-color:var(--dig)}
+.row .tm{font-family:'Oswald',sans-serif;font-size:24px;font-weight:300;color:var(--c80)}
+.row .cs{font-family:'Oswald',sans-serif;font-size:30px;font-weight:600;letter-spacing:.5px}
+.row .qth{font-size:16px;color:var(--c50);line-height:1.25}
+.row .qth b{display:block;color:var(--c80);font-weight:400;font-size:18px}
+.row .bm{text-align:right;font-family:'Oswald',sans-serif;font-size:21px;color:var(--c80)}
+.row .bm em{display:block;font-style:normal;font-size:14px;color:var(--c50);letter-spacing:2px;text-transform:uppercase}
+.row .di{text-align:right;font-family:'Oswald',sans-serif;font-size:23px}
+.row .di em{font-style:normal;font-size:13px;color:var(--c50);margin-left:4px}
+.tag{display:inline-block;background:var(--orange);color:#152333;font-family:'Oswald',sans-serif;
+  font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;
+  padding:2px 8px;border-radius:6px;margin-left:9px;vertical-align:3px}
+.tag.g{background:var(--gold)}
+
+.ftr{margin-top:auto;display:flex;justify-content:space-between;align-items:center;
+  font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c30);
+  border-top:1px solid var(--line);padding-top:13px}
+</style>
+</head>
+<body>
+<div id="fit"><div id="board">
+
+  <div class="hdr z">
+    <div>
+      <div class="call">K8JKU</div>
+      <div class="sub">On the air &middot; last 7 days</div>
+    </div>
+    <div class="hdr-r">
+      <div class="t">14:32<span style="font-size:22px;color:var(--c50)"> UTC</span></div>
+      <div class="d">Fri 28 Aug 2026</div>
+    </div>
+  </div>
+
+  <div class="tiles z">
+    <div class="tile hot"><div class="n">23</div><div class="l">Today</div></div>
+    <div class="tile"><div class="n">96</div><div class="l">This week</div></div>
+    <div class="tile"><div class="n">341</div><div class="l">Last 30 days</div></div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>Daily count</span><i></i></div>
+    <div class="days">
+      <div class="day"><div class="c">8</div><div class="b" style="height:22%"></div><div class="l">Sat</div></div>
+      <div class="day"><div class="c">14</div><div class="b" style="height:39%"></div><div class="l">Sun</div></div>
+      <div class="day"><div class="c">4</div><div class="b" style="height:11%"></div><div class="l">Mon</div></div>
+      <div class="day"><div class="c">11</div><div class="b" style="height:31%"></div><div class="l">Tue</div></div>
+      <div class="day"><div class="c">0</div><div class="b" style="height:2%"></div><div class="l">Wed</div></div>
+      <div class="day"><div class="c">36</div><div class="b" style="height:100%"></div><div class="l">Thu</div></div>
+      <div class="day today"><div class="c">23</div><div class="b" style="height:64%"></div><div class="l">Today</div></div>
+    </div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>Past 24 hours &middot; UTC</span><i></i></div>
+    <div id="hours"></div>
+    <div id="hlab"></div>
+  </div>
+
+  <div class="z" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="sh"><span>Latest contacts</span><i></i></div>
+    <div class="log">
+      <div class="row m-dig"><div class="tm">14:18</div><div class="cs">3B8FA<span class="tag">New DXCC</span></div>
+        <div class="qth"><b>Mauritius</b>LG89gh &middot; Raj</div><div class="bm">20m<em>FT8</em></div><div class="di">9,847<em>mi</em></div></div>
+      <div class="row m-ssb"><div class="tm">13:52</div><div class="cs">W7RCA</div>
+        <div class="qth"><b>Wyoming</b>DN71jk &middot; Dale</div><div class="bm">20m<em>SSB</em></div><div class="di">1,318<em>mi</em></div></div>
+      <div class="row m-cw"><div class="tm">13:40</div><div class="cs">OH2BH</div>
+        <div class="qth"><b>Finland</b>KP20le &middot; Martti</div><div class="bm">17m<em>CW</em></div><div class="di">4,262<em>mi</em></div></div>
+      <div class="row m-dig"><div class="tm">13:27</div><div class="cs">JA1XYZ</div>
+        <div class="qth"><b>Japan</b>PM95tq &middot; Hiro</div><div class="bm">15m<em>FT8</em></div><div class="di">6,411<em>mi</em></div></div>
+      <div class="row m-ssb"><div class="tm">13:11</div><div class="cs">K4ELI</div>
+        <div class="qth"><b>Georgia</b>EM84 &middot; Susan</div><div class="bm">40m<em>SSB</em></div><div class="di">618<em>mi</em></div></div>
+      <div class="row m-cw"><div class="tm">12:49</div><div class="cs">VE3MPX</div>
+        <div class="qth"><b>Ontario</b>FN03cv &middot; Paul</div><div class="bm">30m<em>CW</em></div><div class="di">294<em>mi</em></div></div>
+      <div class="row m-dig"><div class="tm">12:31</div><div class="cs">EA7HLM<span class="tag g">New grid</span></div>
+        <div class="qth"><b>Spain</b>IM66sr &middot; Carlos</div><div class="bm">20m<em>FT8</em></div><div class="di">4,038<em>mi</em></div></div>
+      <div class="row m-ssb"><div class="tm">12:06</div><div class="cs">N0BKR</div>
+        <div class="qth"><b>Missouri</b>EM48 &middot; Ken</div><div class="bm">40m<em>SSB</em></div><div class="di">452<em>mi</em></div></div>
+      <div class="row m-cw"><div class="tm">11:44</div><div class="cs">DL5ANT</div>
+        <div class="qth"><b>Germany</b>JO52ab &middot; Anke</div><div class="bm">17m<em>CW</em></div><div class="di">4,171<em>mi</em></div></div>
+      <div class="row m-fm"><div class="tm">11:20</div><div class="cs">W8MSC</div>
+        <div class="qth"><b>Michigan</b>EN82 &middot; Repeater net</div><div class="bm">2m<em>FM</em></div><div class="di">14<em>mi</em></div></div>
+      <div class="row m-dig"><div class="tm">10:58</div><div class="cs">LU4DXP</div>
+        <div class="qth"><b>Argentina</b>GF05tj &middot; Diego</div><div class="bm">15m<em>FT8</em></div><div class="di">5,394<em>mi</em></div></div>
+      <div class="row m-cw"><div class="tm">10:31</div><div class="cs">G3XTT</div>
+        <div class="qth"><b>England</b>IO91of &middot; Don</div><div class="bm">20m<em>CW</em></div><div class="di">3,712<em>mi</em></div></div>
+      <div class="row m-ssb"><div class="tm">10:04</div><div class="cs">KE8OJV</div>
+        <div class="qth"><b>Ohio</b>EN81 &middot; Mark</div><div class="bm">40m<em>SSB</em></div><div class="di">118<em>mi</em></div></div>
+      <div class="row m-dig"><div class="tm">09:42</div><div class="cs">PY2NQ</div>
+        <div class="qth"><b>Brazil</b>GG66rd &middot; Ana</div><div class="bm">17m<em>FT8</em></div><div class="di">4,908<em>mi</em></div></div>
+    </div>
+  </div>
+
+  <div class="ftr z">
+    <div>World Radio League &middot; all logbooks</div>
+    <div>Synced 14:28 UTC</div>
+  </div>
+
+</div></div>
+<script>
+var AUTO_FIT = true;
+function fit(){
+  if(!AUTO_FIT) return;
+  var s = Math.min(innerWidth/1080, innerHeight/1920);
+  var f = document.getElementById('fit');
+  f.style.transform = 'scale('+s+')';
+  f.style.left = ((innerWidth - 1080*s)/2)+'px';
+}
+addEventListener('resize', fit); fit();
+
+/* ---- Sample: contacts per UTC hour over the trailing 24 hours, oldest first ---- */
+var HOURS = [2,0,0,1,4,0,0,0,0,3,6,2,1,0,0,0,0,5,9,4,2,7,11,6];
+var NOW_HOUR = 14;
+(function(){
+  var max = Math.max.apply(null, HOURS) || 1;
+  var bars = '', labs = '';
+  for(var i=0;i<24;i++){
+    var utc = (NOW_HOUR - 23 + i + 48) % 24;
+    var pct = Math.max(3, Math.round(HOURS[i]/max*100));
+    bars += '<div class="hb'+(i===23?' now':'')+'" style="height:'+pct+'%"></div>';
+    labs += '<div>'+(utc%4===0 ? String(utc).padStart(2,'0') : '')+'</div>';
+  }
+  document.getElementById('hours').innerHTML = bars;
+  document.getElementById('hlab').innerHTML = labs;
+})();
+</script>
+</body>
+</html>
