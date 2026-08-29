@@ -475,7 +475,8 @@ def step_sample(session, logbooks, full=False):
         print(f"    oldest : {lo.isoformat()}")
         print(f"    span   : {span} days for {n} contacts "
               f"({n / max(span, 1):.1f} QSO/day average)")
-        print(f"\n    (results are newest-first, so this is the trailing edge of the log)")
+        if not full:
+            print(f"\n    (newest-first, so this is the trailing edge of the log)")
     else:
         print("  ! no parseable timestamps in the sample")
     if unparsed:
@@ -489,8 +490,97 @@ def step_sample(session, logbooks, full=False):
         for y in sorted(years):
             print(f"    {y}  {years[y]:6}")
 
+    if full:
+        report_reach(contacts)
+        report_distance_outliers(contacts)
     report_logbooks(contacts, logbooks)
     return contacts, meta
+
+
+def report_reach(contacts):
+    """The headline numbers the career and grid boards actually display."""
+    rule()
+    grids4 = {str(c.get("gridsquare")).strip().upper()[:4]
+              for c in contacts if not is_absent(c.get("gridsquare"))
+              and len(str(c.get("gridsquare")).strip()) >= 4}
+    fields = {g[:2] for g in grids4}
+    entities = {c.get("dxcc") for c in contacts if c.get("dxcc") is not None}
+
+    lens = Counter(len(str(c.get("gridsquare")).strip())
+                   for c in contacts if not is_absent(c.get("gridsquare")))
+
+    print("  REACH — what the boards would display\n")
+    print(f"    unique grids (4-char)  : {len(grids4)}")
+    print(f"    unique fields (2-char) : {len(fields)} of 324")
+    print(f"    unique dxcc entities   : {len(entities)}")
+    print(f"\n    gridsquare precision actually stored:")
+    for ln, cnt in sorted(lens.items()):
+        print(f"      {ln} chars  {cnt:6}")
+    return grids4, entities
+
+
+def report_distance_outliers(contacts):
+    """How trustworthy is `distance` per-contact, not just in aggregate?
+
+    The median says kilometres beyond doubt, but records like "furthest
+    contact" are decided by a SINGLE row, so a handful of bad rows matters
+    far more there than it does to a median.
+    """
+    rule()
+    rows = []
+    for c in contacts:
+        d, g = c.get("distance"), c.get("gridsquare")
+        center = grid_center(g)
+        if d is None or center is None:
+            continue
+        try:
+            d = float(d)
+        except (TypeError, ValueError):
+            continue
+        mi = great_circle(QTH_LAT, QTH_LON, center[0], center[1], EARTH_RADIUS_MI)
+        if mi < 50:
+            continue
+        rows.append((d / mi, c, d, mi))
+
+    if not rows:
+        print("  DISTANCE OUTLIERS — nothing comparable")
+        return
+
+    KM = 1.0 / MI_PER_KM
+    bad = [r for r in rows if not (0.8 * KM <= r[0] <= 1.25 * KM)]
+    print(f"  DISTANCE OUTLIERS — rows more than 20-25% off the km ratio\n")
+    print(f"    {len(bad)} of {len(rows)} comparable rows ({pct(len(bad), len(rows)):.2f}%)")
+
+    # Does operating portable explain them? WRL computes from the QSO's own
+    # myGridsquare; we compare against a fixed home QTH.
+    def home(c):
+        mg = str(c.get("myGridsquare") or "").strip().upper()
+        return mg.startswith("EN82")
+
+    bad_away = sum(1 for r in bad if not home(r[1]))
+    all_away = sum(1 for r in rows if not home(r[1]))
+    print(f"    of those, {bad_away} were logged from a myGridsquare outside EN82")
+    print(f"    (across the whole set, {all_away} of {len(rows)} were outside EN82)")
+    if all_away:
+        print(f"    outlier rate away from EN82 : {pct(bad_away, all_away):.1f}%")
+    if len(rows) - all_away:
+        print(f"    outlier rate at home EN82   : "
+              f"{pct(len(bad) - bad_away, len(rows) - all_away):.1f}%")
+
+    print(f"\n    worst offenders:")
+    for ratio, c, d, mi in sorted(rows, key=lambda r: -abs(r[0] - KM))[:8]:
+        print(f"      {str(c.get('call')):10} their={str(c.get('gridsquare')):9} "
+              f"mine={str(c.get('myGridsquare') or '-'):9} "
+              f"api={d:10,.1f}  calc={mi:9,.1f}mi  ratio={ratio:8.2f}")
+
+    dists = [float(c["distance"]) for c in contacts
+             if c.get("distance") is not None]
+    if dists:
+        mx = max(dists)
+        print(f"\n    largest distance in log : {mx:,.1f} "
+              f"({mx * MI_PER_KM:,.1f} mi if km)")
+        if mx * MI_PER_KM > 12500:
+            print(f"      ! exceeds the ~12,450 mi antipodal maximum — that row is bad")
 
 
 def report_logbooks(contacts, logbooks):
