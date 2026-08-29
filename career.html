@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WRL Career Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Source+Sans+Pro:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#152333; --navy-d:#0d1620; --navy-l:#1e3347;
+  --orange:#ff7030; --cream:#fdf8e5;
+  --c80:rgba(253,248,229,.80); --c50:rgba(253,248,229,.50); --c30:rgba(253,248,229,.30);
+  --card:rgba(255,255,255,.05); --line:rgba(255,255,255,.10);
+  --cw:#4a90e2; --ssb:#ff7030; --fm:#9b59b6; --dig:#2ecc71; --gold:#E0A52E;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#000;overflow:hidden;height:100%}
+#fit{position:absolute;top:0;left:0;transform-origin:top left}
+#board{
+  width:1080px;height:1920px;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,var(--navy-d) 0%,var(--navy) 45%,var(--navy-l) 100%);
+  color:var(--cream);font-family:'Source Sans Pro',sans-serif;
+  padding:36px 40px;display:flex;flex-direction:column;gap:20px;
+}
+#board::before,#board::after{
+  content:'';position:absolute;width:640px;height:640px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(255,112,48,.13) 0%,rgba(255,112,48,0) 70%);
+}
+#board::before{top:-260px;left:-240px}
+#board::after{bottom:-280px;right:-260px}
+.z{position:relative;z-index:2}
+
+.hdr{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid var(--orange);padding-bottom:16px}
+.call{font-family:'Oswald',sans-serif;font-weight:700;font-size:74px;line-height:.9;letter-spacing:1px}
+.sub{font-family:'Oswald',sans-serif;font-weight:400;font-size:20px;letter-spacing:5px;text-transform:uppercase;color:var(--orange);margin-top:8px}
+.hdr-r{text-align:right}
+.hdr-r .t{font-family:'Oswald',sans-serif;font-size:46px;font-weight:300;line-height:1}
+.hdr-r .d{font-size:17px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50);margin-top:6px}
+
+.hero{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px 32px;display:flex;align-items:center;justify-content:space-between}
+.hero .big{font-family:'Oswald',sans-serif;font-weight:300;font-size:128px;line-height:.82;letter-spacing:-2px}
+.hero .lbl{font-size:16px;letter-spacing:4px;text-transform:uppercase;color:var(--c50);margin-top:10px}
+.since{text-align:right;font-size:17px;color:var(--c80);line-height:1.7}
+.since b{font-family:'Oswald',sans-serif;font-weight:500;font-size:30px;color:var(--orange);display:block;line-height:1.1}
+
+.sh{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.sh span{font-family:'Oswald',sans-serif;font-size:19px;font-weight:500;letter-spacing:4px;text-transform:uppercase;color:var(--orange);white-space:nowrap}
+.sh i{flex:1;height:1px;background:linear-gradient(90deg,rgba(255,112,48,.55),rgba(255,112,48,0))}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 16px;text-align:center}
+.stat .n{font-family:'Oswald',sans-serif;font-weight:400;font-size:56px;line-height:1}
+.stat .n small{font-size:24px;color:var(--c50);font-weight:300}
+.stat .l{font-size:13px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50);margin-top:6px}
+.stat.odo .n{color:var(--gold)}
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px}
+
+.band{display:grid;grid-template-columns:52px 1fr 68px;align-items:center;gap:10px;margin-bottom:11px}
+.band:last-child{margin-bottom:0}
+.band .bn{font-family:'Oswald',sans-serif;font-size:20px;color:var(--c80);text-align:right}
+.band .tr{height:14px;background:rgba(255,255,255,.06);border-radius:7px;overflow:hidden}
+.band .fl{height:100%;background:var(--orange);border-radius:7px}
+.band .bv{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c50);text-align:right}
+
+.mbar{display:flex;height:34px;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.mleg{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.mleg div{display:flex;align-items:center;gap:9px;font-size:16px;color:var(--c80)}
+.dot{width:12px;height:12px;border-radius:3px;flex:none}
+.mleg b{margin-left:auto;font-family:'Oswald',sans-serif;font-weight:400;color:var(--cream)}
+
+.rec{display:flex;align-items:baseline;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.rec:last-child{border-bottom:none;padding-bottom:0}
+.rec .k{font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50)}
+.rec .v{font-family:'Oswald',sans-serif;font-size:28px;font-weight:500}
+.rec .v em{font-style:normal;font-size:16px;color:var(--c50);margin-left:8px;font-weight:300}
+.gold{color:var(--gold)}
+
+/* heatmap */
+#heat{display:grid;grid-template-columns:54px repeat(24,1fr);gap:4px;align-items:center}
+#heat .hb{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c80);text-align:right;padding-right:6px}
+#heat .cell{height:38px;border-radius:4px;background:rgba(255,255,255,.045)}
+#heat .hh{font-family:'Oswald',sans-serif;font-size:14px;color:var(--c50);text-align:center;padding-top:4px}
+.hkey{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-top:12px;font-size:14px;
+  letter-spacing:2px;text-transform:uppercase;color:var(--c50)}
+.hkey i{width:26px;height:12px;border-radius:3px;display:inline-block}
+
+.yrs{display:flex;align-items:flex-end;gap:11px;height:120px;padding-top:6px}
+.yr{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.yr .b{width:100%;background:rgba(255,112,48,.35);border-radius:5px 5px 0 0}
+.yr.now .b{background:var(--orange)}
+.yr .y{font-family:'Oswald',sans-serif;font-size:15px;color:var(--c50);margin-top:8px}
+.yr .c{font-family:'Oswald',sans-serif;font-size:15px;color:var(--c80);margin-bottom:5px}
+
+.ftr{margin-top:auto;display:flex;justify-content:space-between;align-items:center;
+  font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c30);
+  border-top:1px solid var(--line);padding-top:14px}
+/* ---- appended: stale indicator only. Nothing above this line is changed. ---- */
+.ftr .stale{color:var(--orange);opacity:0;transition:opacity .4s}
+.ftr .stale.on{opacity:1}
+</style>
+</head>
+<body>
+<div id="fit"><div id="board">
+
+  <div class="hdr z">
+    <div>
+      <div class="call">K8JKU</div>
+      <div class="sub">Station log &middot; career</div>
+    </div>
+    <div class="hdr-r">
+      <div class="t"><span id="clock">--:--</span><span style="font-size:22px;color:var(--c50)"> UTC</span></div>
+      <div class="d" id="today">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="hero z">
+    <div>
+      <div class="big" id="total">&mdash;</div>
+      <div class="lbl">Contacts logged</div>
+    </div>
+    <div class="since">
+      <b id="thisYear">&mdash;</b> logged this year<br>
+      <span style="color:var(--c50)" id="firstQso">&nbsp;</span>
+    </div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>Reach</span><i></i></div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="dxcc">&mdash;</div><div class="l">DXCC</div></div>
+      <div class="stat"><div class="n" id="gridsN">&mdash;</div><div class="l">Grids</div></div>
+      <div class="stat"><div class="n" id="conts">&mdash;</div><div class="l">Continents</div></div>
+      <div class="stat odo"><div class="n" id="miles">&mdash;</div><div class="l">Miles worked</div></div>
+    </div>
+  </div>
+
+  <div class="cols z">
+    <div class="panel">
+      <div class="sh"><span>Bands</span><i></i></div>
+      <div id="bands"></div>
+    </div>
+
+    <div class="panel">
+      <div class="sh"><span>Modes</span><i></i></div>
+      <div class="mbar" id="mbar"></div>
+      <div class="mleg" id="mleg"></div>
+      <div style="height:20px"></div>
+      <div class="sh"><span>Records</span><i></i></div>
+      <div id="records"></div>
+    </div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>When you operate &middot; UTC hour by band</span><i></i></div>
+    <div id="heat"></div>
+    <div class="hkey">
+      <span>Fewer</span>
+      <i style="background:rgba(255,255,255,.045)"></i>
+      <i style="background:rgba(255,112,48,.28)"></i>
+      <i style="background:rgba(255,112,48,.55)"></i>
+      <i style="background:rgba(255,112,48,.82)"></i>
+      <i style="background:#ff7030"></i>
+      <span>More</span>
+    </div>
+  </div>
+
+  <div class="z">
+    <div class="sh"><span>Contacts by year</span><i></i></div>
+    <div class="yrs" id="years"></div>
+  </div>
+
+  <div class="ftr z">
+    <div>World Radio League &middot; home + POTA</div>
+    <div><span class="stale" id="stale">Stale &middot; </span><span id="synced">&nbsp;</span></div>
+  </div>
+
+</div></div>
+<script>
+/* ------------------------------------------------------------------ tuning */
+var AUTO_FIT   = false;          // true only to view in a browser window
+var DATA_URL   = 'data/latest/career.json';
+var TICK_MS    = 1000;           // master tick: clock + fetch scheduling
+var REFRESH_MS = 10 * 60 * 1000; // career data changes nightly
+var STALE_AFTER = 3;             // consecutive failures before the badge
+var MAX_BANDS  = 8;              // bands panel rows
+var MAX_MODES  = 4;              // mode legend entries
+var CAT_COLOR  = {cw:'#4a90e2', ssb:'#ff7030', fm:'#9b59b6', dig:'#2ecc71'};
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+/* ------------------------------------------------------------------- fit */
+function fit(){
+  if(!AUTO_FIT) return;
+  var s = Math.min(innerWidth/1080, innerHeight/1920);
+  var f = document.getElementById('fit');
+  f.style.transform = 'scale('+s+')';
+  f.style.left = ((innerWidth - 1080*s)/2)+'px';
+}
+addEventListener('resize', fit); fit();
+
+/* --------------------------------------------------------------- helpers */
+function $(id){ return document.getElementById(id); }
+function num(n){ return (n==null) ? '—' : n.toLocaleString('en-US'); }
+function pad(n){ return (n<10?'0':'')+n; }
+
+// 8,299,309 -> {v:'8.3', u:'M'}; the odometer tile keeps its small suffix.
+function odometer(mi){
+  if(mi==null) return {v:'—', u:''};
+  if(mi >= 1e6) return {v:(mi/1e6).toFixed(1), u:'M'};
+  if(mi >= 1e3) return {v:(mi/1e3).toFixed(0), u:'K'};
+  return {v:String(mi), u:''};
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  var p = String(iso).slice(0,10).split('-');
+  if(p.length !== 3) return '';
+  return pad(+p[2])+' '+MONTHS[+p[1]-1]+' '+p[0];
+}
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+
+/* ----------------------------------------------------------------- state */
+var lastSig = null;      // payload signature; guards against needless rebuilds
+var lastGood = null;     // last payload that rendered, kept across failures
+var failures = 0;
+var ticks = 0;
+
+/* --------------------------------------------------------------- rendering */
+function renderHeader(){
+  var d = new Date();
+  $('clock').textContent = pad(d.getUTCHours())+':'+pad(d.getUTCMinutes());
+  $('today').textContent = DAYS[d.getUTCDay()]+' '+pad(d.getUTCDate())+' '
+                         + MONTHS[d.getUTCMonth()]+' '+d.getUTCFullYear();
+}
+
+function renderBands(bands){
+  var top = (bands||[]).slice(0, MAX_BANDS);
+  var max = top.reduce(function(m,b){ return Math.max(m, b.count); }, 0) || 1;
+  $('bands').innerHTML = top.map(function(b){
+    var w = Math.max(2, Math.round(100*b.count/max));
+    return '<div class="band"><div class="bn">'+esc(b.band)+'</div>'
+         + '<div class="tr"><div class="fl" style="width:'+w+'%"></div></div>'
+         + '<div class="bv">'+num(b.count)+'</div></div>';
+  }).join('');
+}
+
+function renderModes(groups, modes){
+  var g = (groups||[]).filter(function(x){ return x.count > 0; });
+  var tot = g.reduce(function(s,x){ return s+x.count; }, 0) || 1;
+  $('mbar').innerHTML = g.map(function(x){
+    return '<div style="width:'+(100*x.count/tot).toFixed(2)+'%;background:'
+         + (CAT_COLOR[x.category]||CAT_COLOR.dig)+'"></div>';
+  }).join('');
+
+  $('mleg').innerHTML = (modes||[]).slice(0, MAX_MODES).map(function(m){
+    return '<div><i class="dot" style="background:'+(CAT_COLOR[m.category]||CAT_COLOR.dig)
+         + '"></i>'+esc(m.mode)+'<b>'+num(m.count)+'</b></div>';
+  }).join('');
+}
+
+function renderRecords(r){
+  r = r || {};
+  var h = '';
+  if(r.furthest){
+    h += '<div class="rec"><div class="k">Furthest</div><div class="v gold">'
+       + num(r.furthest.miles)+'<em>mi &middot; '+esc(r.furthest.call)+'</em></div></div>';
+  }
+  if(r.best_day){
+    h += '<div class="rec"><div class="k">Best day</div><div class="v gold">'
+       + num(r.best_day.count)+'<em>QSOs &middot; '+fmtDate(r.best_day.date)+'</em></div></div>';
+  }
+  h += '<div class="rec"><div class="k">Longest streak</div><div class="v">'
+     + num(r.longest_streak)+'<em>days</em></div></div>';
+  $('records').innerHTML = h;
+}
+
+function renderHeat(heat){
+  heat = heat || {};
+  var bands = Object.keys(heat), h = '', max = 0;
+  bands.forEach(function(b){
+    heat[b].forEach(function(v){ if(v>max) max = v; });
+  });
+  if(!max) max = 1;
+  bands.forEach(function(b){
+    h += '<div class="hb">'+esc(b)+'</div>';
+    heat[b].forEach(function(v){
+      var bg = 'rgba(255,255,255,.045)';
+      if(v>0){
+        var r = Math.pow(v/max, 0.55);
+        bg = r>0.92 ? '#ff7030' : 'rgba(255,112,48,'+(0.14+r*0.72).toFixed(3)+')';
+      }
+      h += '<div class="cell" style="background:'+bg+'"></div>';
+    });
+  });
+  h += '<div></div>';
+  for(var i=0;i<24;i++){ h += '<div class="hh">'+(i%3===0 ? pad(i) : '')+'</div>'; }
+  $('heat').innerHTML = h;
+}
+
+function renderYears(years){
+  years = years || [];
+  var max = years.reduce(function(m,y){ return Math.max(m, y.count); }, 0) || 1;
+  var now = new Date().getUTCFullYear();
+  $('years').innerHTML = years.map(function(y){
+    var pct = Math.max(2, Math.round(100*y.count/max));
+    return '<div class="yr'+(y.year===now?' now':'')+'">'
+         + '<div class="c">'+num(y.count)+'</div>'
+         + '<div class="b" style="height:'+pct+'%"></div>'
+         + '<div class="y">'+y.year+'</div></div>';
+  }).join('');
+}
+
+function render(d){
+  $('total').textContent    = num(d.total_qsos);
+  $('thisYear').textContent = num(d.qsos_this_year);
+  $('firstQso').textContent = d.first_qso_date ? 'First QSO '+fmtDate(d.first_qso_date) : '';
+  $('dxcc').textContent     = num(d.dxcc_count);
+  $('gridsN').textContent   = num(d.grid_count);
+  $('conts').innerHTML      = num(d.continent_count)
+                            + '<small>/'+(d.continent_total||6)+'</small>';
+  var o = odometer(d.total_distance);
+  $('miles').innerHTML      = o.v + (o.u ? '<small>'+o.u+'</small>' : '');
+
+  renderBands(d.bands);
+  renderModes(d.mode_groups, d.modes);
+  renderRecords(d.records);
+  renderHeat(d.heatmap);
+  renderYears(d.by_year);
+
+  if(d.generated){
+    var g = new Date(d.generated);
+    if(!isNaN(g)) $('synced').textContent = 'Synced '+pad(g.getUTCHours())+':'
+                                          + pad(g.getUTCMinutes())+' UTC';
+  }
+}
+
+/* ------------------------------------------------------------------ fetch */
+function load(){
+  fetch(DATA_URL+'?v='+Date.now(), {cache:'no-store'})
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(d){
+      failures = 0;
+      $('stale').className = 'stale';
+      // Rebuilding identical DOM restarts nothing visually, but it is wasted
+      // work on a Pi that repaints every 10 minutes for no reason.
+      var sig = JSON.stringify(d);
+      if(sig !== lastSig){
+        lastSig = sig;
+        lastGood = d;
+        render(d);
+      }
+    })
+    .catch(function(){
+      // Never wipe the display on a network error. A stale board beats a
+      // blank one; the badge says which we are looking at.
+      failures++;
+      if(failures >= STALE_AFTER) $('stale').className = 'stale on';
+      if(!lastGood && $('synced').textContent.trim() === '')
+        $('synced').textContent = 'Waiting for data';
+    });
+}
+
+/* ------------------------------------------------------- single master tick */
+renderHeader();
+load();
+setInterval(function(){
+  ticks++;
+  renderHeader();
+  if(ticks % Math.round(REFRESH_MS/TICK_MS) === 0) load();
+}, TICK_MS);
+</script>
+</body>
+</html>
