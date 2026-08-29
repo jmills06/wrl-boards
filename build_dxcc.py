@@ -50,6 +50,7 @@ Three source defects are corrected here rather than in the collector:
 import argparse
 import json
 import os
+import re
 import sys
 from collections import defaultdict
 
@@ -106,6 +107,10 @@ def find(explicit, *relative):
         f"how to obtain the source files.")
 
 
+# Decorations cty.dat hangs off an alias: (cq) [itu] <lat/lon> {continent} ~gmt~
+ALIAS_DECOR = re.compile(r"\([^)]*\)|\[[^\]]*\]|<[^>]*>|\{[^}]*\}|~[^~]*~")
+
+
 def parse_cty(path):
     """cty.dat: 'Name: CQ: ITU: Cont: Lat: Lon: GMT: Prefix:' then aliases."""
     out = {}
@@ -128,11 +133,22 @@ def parse_cty(path):
             lat, lon = float(lat), float(lon)
         except ValueError:
             continue
+        # Callsign prefixes that map to this entity. Used only as a fallback
+        # when the API has not enriched a contact with its dxcc code yet.
+        # '=CALL' entries are exact-callsign overrides for specific 2013-era
+        # operators and expeditions; they age badly, so they are skipped.
+        aliases = []
+        for tok in "".join(block.split("\n")[1:]).split(","):
+            t = ALIAS_DECOR.sub("", tok).strip().upper()
+            if t and not t.startswith("="):
+                aliases.append(t)
+
         out[name] = {
             "continent": cont,
             "lat": round(lat, 2) + 0.0,
             "lon": round(-lon, 2) + 0.0,   # cty.dat is west-positive; normalise
             "prefix": prefix,
+            "aliases": aliases,
         }
     return out
 
@@ -156,6 +172,8 @@ def main():
     print(f"ADIF name -> code    : {len(name_to_code)}")
 
     entities = {}
+    prefixes = {}
+    prefix_clashes = []
     claimed = defaultdict(list)
     unresolved = []
 
@@ -177,6 +195,15 @@ def main():
             # Keep the shortest name unless an override already decided it.
             if code in NAME_OVERRIDE or len(prev["name"]) <= len(display):
                 continue
+        for a in rec["aliases"]:
+            # Longest prefix wins at lookup time, so a collision here only
+            # matters when two entities claim the identical string. Keep the
+            # first, which is the alphabetically earlier entity, and record it.
+            if a in prefixes and prefixes[a] != code:
+                prefix_clashes.append((a, prefixes[a], code))
+            else:
+                prefixes[a] = code
+
         entities[code] = {
             "name": display,
             "continent": cont,
@@ -208,6 +235,8 @@ def main():
     collisions = {c: ns for c, ns in claimed.items() if len(ns) > 1}
 
     print(f"\nentities written     : {len(entities)}")
+    print(f"callsign prefixes    : {len(prefixes)}"
+          + (f"  ({len(prefix_clashes)} clashes kept first)" if prefix_clashes else ""))
     print(f"with continent       : {sum(1 for e in entities.values() if e['continent'])}")
     print(f"with coordinates     : {sum(1 for e in entities.values() if e['lat'] is not None)}")
     print(f"continents present   : {sorted({e['continent'] for e in entities.values() if e['continent']})}")
@@ -239,8 +268,12 @@ def main():
             "generated_by": "build_dxcc.py",
             "longitude": "east-positive (cty.dat's west-positive values negated)",
             "entity_count": len(entities),
+            "prefix_count": len(prefixes),
+            "prefixes": "callsign prefix -> entity code; a FALLBACK only, for "
+                        "contacts the API has not enriched with dxcc yet",
         },
         "entities": {str(k): entities[k] for k in sorted(entities)},
+        "prefixes": {k: prefixes[k] for k in sorted(prefixes)},
     }
 
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)

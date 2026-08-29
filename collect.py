@@ -50,6 +50,8 @@ import dxcc
 FRESH_DAYS = 30
 RECENT_CONTACTS = 14
 RECENT_WINDOW_DAYS = 45
+# Widen to this if the window is too quiet to fill the contact list.
+RECENT_FALLBACK_DAYS = 400
 HEATMAP_BANDS = 8
 PAGE_SIZE = 100
 PAGE_SLEEP = 0.5
@@ -252,12 +254,30 @@ def median(values):
     return s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2.0
 
 
-def place_name(entity_code, state):
+def resolve_entity(entity_code, call):
+    """The API's dxcc when present, else inferred from the callsign.
+
+    Enrichment lags: every one of the 14 most recent contacts in the live log
+    had dxcc null, so the recent board would show a blank country on every
+    row without this fallback.
+    """
+    if entity_code is not None:
+        return entity_code
+    return dxcc.entity_from_call(call)
+
+
+def place_name(entity_code, state, call=None):
     """What the recent board bolds: state for NA entities, country otherwise."""
-    if entity_code in STATE_ENTITIES and not is_absent(state):
-        abbr = str(state).strip().upper()
+    code = resolve_entity(entity_code, call)
+    abbr = str(state).strip().upper() if not is_absent(state) else None
+
+    if code in STATE_ENTITIES and abbr:
         return STATES.get(abbr, abbr)
-    return dxcc.country(entity_code)
+    # No entity at all, but a recognised state abbreviation is itself strong
+    # evidence: WRL only populates `state` for entities that have states.
+    if code is None and abbr in STATES:
+        return STATES[abbr]
+    return dxcc.country(code)
 
 
 # ---------------------------------------------------------------- fetch
@@ -309,8 +329,13 @@ def get_page(session, params):
     raise CollectError("exhausted retries")
 
 
-def fetch_all(session, since=None):
+def fetch_all(session, since=None, stop_before=None):
     """Page the log newest-first until nextCursor is null. Returns all rows.
+
+    `since` is sent to the API. `stop_before` additionally stops paging once
+    rows older than it appear, so a recent pull stays cheap even if the
+    server ignores or misreads the filter. Results are newest-first, which
+    makes that safe.
 
     Any failure raises. A partial pull must never reach the aggregation step:
     a stale board is fine, a wiped board is not.
@@ -332,6 +357,11 @@ def fetch_all(session, since=None):
 
         if page % 10 == 1 or not batch:
             print(f"    page {page}: {len(rows)} contacts so far")
+
+        if stop_before and batch:
+            oldest = parse_ts(batch[-1].get("timestamp"))
+            if oldest and oldest < stop_before:
+                break
 
         cursor = (body.get("meta") or {}).get("nextCursor")
         if not cursor or not batch:
@@ -358,6 +388,7 @@ class Aggregate:
         self.excluded = 0
         self.duplicates = 0
         self.no_timestamp = 0
+        self.inferred_entities = 0
 
         self.bands = Counter()
         self.modes = Counter()
@@ -435,7 +466,13 @@ class Aggregate:
                 if self.furthest is None or miles > self.furthest[0]:
                     self.furthest = (miles, c.get("call"), day)
 
+            # Count the resolved entity, so a contact the API has not enriched
+            # yet still counts toward DXCC and continents.
             code = c.get("dxcc")
+            if code is None:
+                code = dxcc.entity_from_call(c.get("call"))
+                if code is not None:
+                    self.inferred_entities += 1
             if code is not None:
                 self.entities.add(code)
                 self.entity_first_seen.setdefault(code, ts)
@@ -588,14 +625,20 @@ def build_grids(agg):
         "arcs": arcs,
         "median_distance": medians,
         "newest_grids": [
-            {"grid": g, "call": call, "country": dxcc.country(code),
+            {"grid": g, "call": call, "country": dxcc.country_for(code, call),
              "date": ts.date().isoformat()}
             for g, (ts, call, code) in newest
         ],
     }
 
 
-def build_recent(agg):
+def build_recent(agg, known=None):
+    """known: {"entities": set, "grids": set} from the last full run.
+
+    In full mode the whole log is present, so "first ever worked" is decided
+    directly. In recent mode only a 45-day window was pulled, and a first
+    must be judged against what the nightly run already knew.
+    """
     now = agg.now
     today = now.date()
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -624,17 +667,31 @@ def build_recent(agg):
             if 0 <= idx < 24:
                 hourly[idx] += 1
 
+    known_e = (known or {}).get("entities")
+    known_g = (known or {}).get("grids")
+
     recent_rows = agg.rows[-RECENT_CONTACTS:][::-1]
     contacts = []
     for r in recent_rows:
         code = r["dxcc"]
         first_e = agg.entity_first_seen.get(code)
         first_g = agg.grid_first_seen.get(r["grid4"], (None,))[0]
+
+        if known_e is None:
+            new_dxcc = bool(code is not None and first_e == r["ts"])
+            new_grid = bool(r["grid4"] and first_g == r["ts"])
+        else:
+            # First in this window AND absent from what the full run knew.
+            new_dxcc = bool(code is not None and first_e == r["ts"]
+                            and code not in known_e)
+            new_grid = bool(r["grid4"] and first_g == r["ts"]
+                            and r["grid4"] not in known_g)
+
         contacts.append({
             "time": r["ts"].strftime("%H:%M"),
             "call": r["call"],
-            "country": dxcc.country(code),
-            "place": place_name(code, r["state"]),
+            "country": dxcc.country_for(code, r["call"]),
+            "place": place_name(code, r["state"], r["call"]),
             "state": (r["state"] or "").strip().upper() or None,
             "grid": (r["grid"] or "").strip() or None,
             "name": (r["name"] or "").strip() or None,
@@ -642,8 +699,8 @@ def build_recent(agg):
             "mode": r["mode"],
             "category": mode_category(r["mode"]) if r["mode"] else None,
             "distance": round(r["miles"]) if r["miles"] is not None else None,
-            "new_dxcc": bool(code is not None and first_e == r["ts"]),
-            "new_grid": bool(r["grid4"] and first_g == r["ts"]),
+            "new_dxcc": new_dxcc,
+            "new_grid": new_grid,
         })
 
     return {
@@ -658,15 +715,44 @@ def build_recent(agg):
     }
 
 
-def build_known(agg):
+KNOWN_PATH = os.path.join(OUT_DIR, "known.json")
+
+
+def build_known(agg, previous=None, source="full"):
     """Entity and grid sets, so the 30-minute recent run can flag firsts
-    without pulling the whole log."""
+    without pulling the whole log.
+
+    A recent run only saw 45 days, so it must MERGE into what it was given
+    rather than replace it. Replacing would forget everything older and make
+    every entity look new again on the following run.
+    """
+    entities = {e for e in agg.entities if e is not None}
+    grids = set(agg.grids)
+    if previous:
+        entities |= set(previous.get("entities") or ())
+        grids |= set(previous.get("grids") or ())
     return {
         "generated": agg.now.isoformat(timespec="seconds"),
-        "source": "full",
-        "entities": sorted(e for e in agg.entities if e is not None),
-        "grids": sorted(agg.grids),
+        "source": source,
+        "entities": sorted(entities),
+        "grids": sorted(grids),
     }
+
+
+def read_known():
+    """Previous known sets, or None if absent/unreadable."""
+    try:
+        with open(KNOWN_PATH, encoding="utf-8") as fh:
+            d = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    ents = d.get("entities")
+    grids = d.get("grids")
+    if not isinstance(ents, list) or not isinstance(grids, list):
+        return None
+    return {"entities": set(ents), "grids": set(grids),
+            "generated": d.get("generated"), "source": d.get("source"),
+            "raw": d}
 
 
 # ---------------------------------------------------------------- validate
@@ -733,7 +819,9 @@ def report(agg, career, grids, recent):
     print(f"  no usable timestamp : {agg.no_timestamp:,}")
     print(f"  flagged isDuplicate : {agg.duplicates:,}  (counted, not dropped)")
     print(f"  first QSO           : {career['first_qso_date']}")
-    print(f"  entities / grids    : {career['dxcc_count']} / {career['grid_count']}")
+    print(f"  entities / grids    : {career['dxcc_count']} / {career['grid_count']}"
+          f"   ({agg.inferred_entities:,} entities inferred from callsign, "
+          f"API had not enriched them)")
     print(f"  continents          : {career['continent_count']}/{career['continent_total']}")
     print(f"  distance total      : {career['total_distance']:,} mi "
           f"(from {agg.with_distance:,} contacts)")
@@ -767,6 +855,93 @@ def report(agg, career, grids, recent):
 
 # ---------------------------------------------------------------- main
 
+def run_recent(session, now, args):
+    """Pull the trailing window only and refresh recent.json + known.json.
+
+    Never touches career.json or grids.json: those describe the whole log and
+    a 45-day window cannot produce them.
+    """
+    window_start = now - timedelta(days=RECENT_WINDOW_DAYS)
+    since = window_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"  pulling contacts since {since} ...")
+
+    try:
+        raw = fetch_all(session, since=since, stop_before=window_start)
+    except CollectError as exc:
+        print(f"\nFETCH FAILED — nothing written: {exc}", file=sys.stderr)
+        return 1
+    print(f"  pulled {len(raw):,} contacts")
+
+    agg = Aggregate(raw, now)
+
+    # The panel shows the last 14 contacts. A quiet window would leave it
+    # nearly empty, which reads as a broken board rather than a quiet month,
+    # so widen once and try again.
+    if agg.total < RECENT_CONTACTS:
+        wide_start = now - timedelta(days=RECENT_FALLBACK_DAYS)
+        print(f"  only {agg.total} contacts in {RECENT_WINDOW_DAYS} days; "
+              f"widening to {RECENT_FALLBACK_DAYS} to fill the contact list")
+        try:
+            raw = fetch_all(session,
+                            since=wide_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            stop_before=wide_start)
+            agg = Aggregate(raw, now)
+        except CollectError as exc:
+            print(f"\nFETCH FAILED — nothing written: {exc}", file=sys.stderr)
+            return 1
+
+    if raw:
+        oldest = min((parse_ts(c.get("timestamp")) for c in raw
+                      if parse_ts(c.get("timestamp"))), default=None)
+        if oldest and oldest < now - timedelta(days=RECENT_FALLBACK_DAYS * 2):
+            print(f"  ! the API returned contacts from {oldest.date()}, far "
+                  f"outside the requested window — the `since` filter may be "
+                  f"ignored. Results are still correct, just more expensive.")
+
+    known = read_known()
+    if known is None:
+        print("  ! no readable data/latest/known.json. New DXCC and new grid "
+              "flags will be suppressed this run; the nightly full run "
+              "rebuilds the sets.")
+    elif known.get("generated"):
+        print(f"  known sets from {known['generated']} "
+              f"({len(known['entities'])} entities, {len(known['grids'])} grids)")
+
+    recent = build_recent(agg, known)
+    merged = build_known(agg, previous=known.get("raw") if known else None,
+                         source="recent")
+
+    print("\n" + "=" * 70)
+    print("COLLECTED (recent window)")
+    print("=" * 70)
+    print(f"  contacts in window  : {agg.total:,}")
+    print(f"  excluded (logbook)  : {agg.excluded:,}")
+    print(f"  today / week / month: {recent['today']} / {recent['week']} / {recent['month']}")
+    print(f"  contacts listed     : {len(recent['contacts'])}")
+    print(f"  new dxcc flagged    : {sum(1 for c in recent['contacts'] if c['new_dxcc'])}")
+    print(f"  new grid flagged    : {sum(1 for c in recent['contacts'] if c['new_grid'])}")
+    print(f"  known sets now      : {len(merged['entities'])} entities, "
+          f"{len(merged['grids'])} grids")
+
+    if agg.total == 0:
+        print("\n  ! the window is empty. Writing zeroes is correct if you "
+              "have not operated; pass --force if that is genuinely the case.")
+        if not args.force:
+            print("\nVALIDATION FAILED — nothing written.", file=sys.stderr)
+            return 1
+
+    if args.dry_run:
+        print("\n  --dry-run: nothing written")
+        return 0
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    print()
+    for name, payload in (("recent.json", recent), ("known.json", merged)):
+        size = write_json(os.path.join(OUT_DIR, name), payload)
+        print(f"  wrote {OUT_DIR}/{name:12} {size:>9,} bytes")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Collect WRL log into board JSON.")
     ap.add_argument("--mode", choices=["full", "recent"], default="full")
@@ -776,11 +951,6 @@ def main():
                     help="write even if validation objects")
     args = ap.parse_args()
 
-    if args.mode == "recent":
-        print("recent mode is not implemented yet (build order step 6).",
-              file=sys.stderr)
-        return 2
-
     key = os.environ.get("WRL_API_KEY", "").strip()
     if not key:
         print("ERROR: WRL_API_KEY is not set.", file=sys.stderr)
@@ -789,11 +959,15 @@ def main():
         return 2
 
     now = datetime.now(timezone.utc)
-    print(f"WRL collect — mode=full  {now.isoformat(timespec='seconds')}")
+    print(f"WRL collect — mode={args.mode}  {now.isoformat(timespec='seconds')}")
     print(f"  dxcc table: {dxcc.count()} entities")
-    print("  pulling entire log ...")
 
     session = build_session(key)
+
+    if args.mode == "recent":
+        return run_recent(session, now, args)
+
+    print("  pulling entire log ...")
     try:
         raw = fetch_all(session)
     except CollectError as exc:
@@ -806,7 +980,7 @@ def main():
     career = build_career(agg)
     grids = build_grids(agg)
     recent = build_recent(agg)
-    known = build_known(agg)
+    known = build_known(agg, source="full")
 
     report(agg, career, grids, recent)
 

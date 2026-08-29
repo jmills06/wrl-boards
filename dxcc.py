@@ -29,15 +29,73 @@ DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 WAC_CONTINENTS = ("AF", "AS", "EU", "NA", "OC", "SA")
 ALL_CONTINENTS = WAC_CONTINENTS + ("AN",)
 
+# Slash segments that indicate operating status, not location.
+CALL_SUFFIXES = {
+    "P", "M", "MM", "AM", "QRP", "A", "B", "R", "LH", "J", "N", "T",
+    "PORTABLE", "MOBILE", "BEACON", "SOTA", "POTA", "QRPP",
+}
+
 _TABLE = None
+_PREFIXES = None
 
 
 def _load():
-    global _TABLE
+    global _TABLE, _PREFIXES
     if _TABLE is None:
         with open(DATA_PATH, encoding="utf-8") as fh:
-            _TABLE = json.load(fh)["entities"]
+            raw = json.load(fh)
+        _TABLE = raw["entities"]
+        _PREFIXES = raw.get("prefixes", {})
     return _TABLE
+
+
+def _prefix_table():
+    _load()
+    return _PREFIXES
+
+
+def entity_from_call(call):
+    """Best-guess ADIF entity code from a callsign. None if no match.
+
+    A FALLBACK ONLY. The API's `dxcc` field is authoritative when present,
+    but enrichment lags, so the newest contacts — precisely the ones the
+    recent board shows — routinely arrive with dxcc null.
+
+    Slash handling: among the segments, operating-status suffixes (/P, /M,
+    /QRP) are dropped, and the SHORTEST remaining segment is taken as the
+    location. That resolves both conventions: DL/W1AW is Germany, and
+    W1AW/VE3 is Canada.
+    """
+    if not call or not str(call).strip():
+        return None
+    table = _prefix_table()
+    if not table:
+        return None
+
+    raw = str(call).strip().upper()
+    # Every amateur callsign carries a digit. Without this the matcher happily
+    # resolves arbitrary text, since almost any letter pair is some prefix.
+    if not (3 <= len(raw) <= 16) or not any(c.isdigit() for c in raw):
+        return None
+    if not all(c.isalnum() or c == "/" for c in raw):
+        return None
+
+    segments = [s for s in raw.split("/") if s]
+    if not segments:
+        return None
+    meaningful = [s for s in segments
+                  if s not in CALL_SUFFIXES and not s.isdigit()]
+    if not meaningful:
+        meaningful = segments
+    meaningful.sort(key=len)
+    candidate = meaningful[0]
+
+    # Longest matching prefix wins: VE3 must beat VE, and 3B8 must beat 3B.
+    for n in range(len(candidate), 0, -1):
+        code = table.get(candidate[:n])
+        if code is not None:
+            return code
+    return None
 
 
 def entity(code):
@@ -54,6 +112,14 @@ def entity(code):
 def country(code, default=None):
     e = entity(code)
     return e["name"] if e else default
+
+
+def country_for(code, call, default=None):
+    """Country name from the entity code, falling back to the callsign."""
+    name = country(code)
+    if name:
+        return name
+    return country(entity_from_call(call), default=default)
 
 
 def continent(code, default=None):
