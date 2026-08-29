@@ -41,6 +41,10 @@ import requests  # noqa: E402  (deliberately after inject_into_ssl)
 
 # ---------------------------------------------------------------- constants
 
+# Bumped whenever the report changes, and printed in the header. A stale
+# download is otherwise indistinguishable from a run that found nothing.
+VERSION = "5 (reach + distance outliers)"
+
 BASE_URL = "https://api.worldradioleague.com"
 TIMEOUT = (10, 60)          # (connect, read) — never a bare float
 PAGE_SIZE = 100
@@ -818,6 +822,11 @@ def main(argv=None):
                          "writes nothing.")
     args = ap.parse_args(argv)
 
+    if args.full:
+        print(f"(discover.py version {VERSION} — a --full run must print REACH "
+              f"and DISTANCE OUTLIERS sections; if it does not, the download "
+              f"was stale)")
+
     key = os.environ.get("WRL_API_KEY", "").strip()
     if not key:
         print("ERROR: WRL_API_KEY is not set.", file=sys.stderr)
@@ -832,6 +841,7 @@ def main(argv=None):
 
     print("=" * W)
     print("WRL API DISCOVERY — read-only, writes no files")
+    print(f"ver  : {VERSION}")
     print(f"base : {BASE_URL}")
     describe_key(key)
     print(f"run  : {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
