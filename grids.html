@@ -130,7 +130,13 @@ html,body{background:#000;overflow:hidden;height:100%}
 <script src="vendor/topojson-client.min.js"></script>
 <script>
 /* ------------------------------------------------------------------ tuning */
-var AUTO_FIT   = false;            // true only to view in a browser window
+var AUTO_FIT   = true;    // scale the 1080x1920 board to fill the viewport
+var ROTATE     = 0;       // 0 | 90 | 180 | 270. Use only when the browser's
+                          // viewport orientation does not match the panel's
+                          // physical orientation. Verified in Chromium:
+                          // 90 puts the board's TOP EDGE on the RIGHT of the
+                          // viewport, 270 puts it on the LEFT. If the display
+                          // comes out upside down, use the other one.
 var DATA_URL   = 'data/latest/grids.json';
 var WORLD_URL  = 'vendor/countries-110m.json';
 var TICK_MS    = 1000;             // master tick: clock + fetch scheduling
@@ -147,11 +153,31 @@ var DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 /* ------------------------------------------------------------------- fit */
 function fit(){
-  if(!AUTO_FIT) return;
-  var s = Math.min(innerWidth/1080, innerHeight/1920);
   var f = document.getElementById('fit');
-  f.style.transform = 'scale('+s+')';
-  f.style.left = ((innerWidth - 1080*s)/2)+'px';
+  if(!f) return;
+
+  // Footprint after rotation: at 90/270 the board's width and height swap.
+  var swap = (ROTATE === 90 || ROTATE === 270);
+  var bw = swap ? 1920 : 1080;
+  var bh = swap ? 1080 : 1920;
+
+  var s = AUTO_FIT ? Math.min(innerWidth/bw, innerHeight/bh) : 1;
+
+  // Centre on both axes. The old version only centred horizontally, which
+  // left the board hugging the top of any viewport taller than the board.
+  var left = (innerWidth  - bw*s)/2;
+  var top  = (innerHeight - bh*s)/2;
+
+  // Rotation happens about the top-left origin, so the board swings out of
+  // view; translate it back by its own rotated footprint before centring.
+  var tx = left, ty = top, rot = '';
+  if(ROTATE === 90)       { tx += bw*s;             rot = ' rotate(90deg)'; }
+  else if(ROTATE === 180) { tx += bw*s; ty += bh*s; rot = ' rotate(180deg)'; }
+  else if(ROTATE === 270) {             ty += bh*s; rot = ' rotate(270deg)'; }
+
+  f.style.left = '0';
+  f.style.top  = '0';
+  f.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+s+')'+rot;
 }
 addEventListener('resize', fit); fit();
 
