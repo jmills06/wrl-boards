@@ -45,7 +45,7 @@ html,body{background:#000;overflow:hidden;height:100%}
 .stat .n small{font-size:24px;color:var(--c50);font-weight:300}
 .stat .l{font-size:13px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c50);margin-top:6px}
 
-.mapwrap{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px 10px}
+.mapwrap{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px 8px}
 #map{width:100%;display:block}
 .legend{display:flex;gap:30px;align-items:center;padding:8px 6px 2px;font-size:16px;color:var(--c80)}
 .legend div{display:flex;align-items:center;gap:9px}
@@ -54,12 +54,15 @@ html,body{background:#000;overflow:hidden;height:100%}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px}
 
-.md{display:grid;grid-template-columns:54px 1fr 92px;align-items:center;gap:12px;margin-bottom:13px}
+.mdh{font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--c50);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08)}
+.mdh:not(:first-child){margin-top:14px}
+.md{display:grid;grid-template-columns:54px 1fr 92px;align-items:center;gap:11px;margin-bottom:7px}
 .md:last-child{margin-bottom:0}
-.md .k{font-family:'Oswald',sans-serif;font-size:21px;color:var(--c80);text-align:right}
-.md .tr{height:14px;background:rgba(255,255,255,.06);border-radius:7px;overflow:hidden}
+.md .k{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c80);text-align:right}
+.md .tr{height:12px;background:rgba(255,255,255,.06);border-radius:7px;overflow:hidden}
 .md .fl{height:100%;background:var(--orange);border-radius:7px}
-.md .v{font-family:'Oswald',sans-serif;font-size:20px;color:var(--c80);text-align:right}
+.md .v{font-family:'Oswald',sans-serif;font-size:18px;color:var(--c80);text-align:right}
 .md .v em{font-style:normal;font-size:13px;color:var(--c50);margin-left:3px}
 
 .ng{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.07)}
@@ -104,12 +107,13 @@ html,body{background:#000;overflow:hidden;height:100%}
       <div><i style="background:rgba(253,248,229,.45)"></i>Worked</div>
       <div><i style="background:var(--orange)"></i>Last 30 days</div>
       <div><i style="background:var(--gold);border-radius:2px"></i>Home &middot; <span id="homeGrid">&mdash;</span></div>
+      <div style="margin-left:auto;color:var(--c50)">Rings are great-circle distance from home</div>
     </div>
   </div>
 
   <div class="cols z">
     <div class="panel">
-      <div class="sh"><span>Median distance</span><i></i></div>
+      <div class="sh"><span>Median distance by band</span><i></i></div>
       <div id="medians"></div>
     </div>
     <div class="panel">
@@ -142,11 +146,18 @@ var WORLD_URL  = 'vendor/countries-110m.json';
 var TICK_MS    = 1000;             // master tick: clock + fetch scheduling
 var REFRESH_MS = 10 * 60 * 1000;   // grid data changes nightly
 var STALE_AFTER = 3;               // consecutive failures before the badge
-var MAX_MEDIANS = 8;               // median-distance panel rows
 var MAX_NEWEST  = 8;               // newest-grids panel rows
 
-var PROJ_SCALE = 232, PROJ_X = 500, PROJ_Y = 340;
-var DOT_R = 2.9, DOT_R_FRESH = 4;
+// Azimuthal equidistant, centred on the home grid: the great-circle map every
+// DXer has on a wall. Radius genuinely IS distance here, which is why the
+// rings below can be labelled in miles and why the median-distance panel
+// underneath is measuring the same thing this map is drawing.
+var MAP_W = 1000, MAP_H = 918;   // svg viewBox; the disc is inscribed in it
+var DOT_R = 2.6, DOT_R_FRESH = 3.8;
+// Mean Earth radius. An azimuthal-equidistant projection at scale S puts a
+// point d miles away at S * (d / EARTH_MI) pixels from the centre.
+var EARTH_MI = 3958.8;
+var RINGS = [1000, 3000, 6000, 9000];
 var C_WORKED = 'rgba(253,248,229,0.45)', C_FRESH = '#ff7030', C_HOME = '#E0A52E';
 var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -204,8 +215,29 @@ function el(name, attrs){
 }
 
 /* ----------------------------------------------------------------- state */
-var proj = d3.geoNaturalEarth1().scale(PROJ_SCALE).translate([PROJ_X, PROJ_Y]);
-var geoPath = d3.geoPath(proj);
+// Built per render: the centre is the home grid, which comes from the data.
+var proj = null, geoPath = null;
+
+function setProjection(home){
+  var lat = home ? home.lat : 42.5, lon = home ? home.lon : -83.0;
+  var R = Math.min(MAP_W, MAP_H) / 2 - 8;
+  proj = d3.geoAzimuthalEquidistant()
+    .rotate([-lon, -lat])          // put home at the centre of the disc
+    .translate([MAP_W/2, MAP_H/2])
+    // Half the circumference maps to the disc radius, so scale = R / PI.
+    .scale(R / Math.PI)
+    // Just shy of the antipode. At exactly 180 the far point is a whole
+    // circle and polygons spanning it tear along the rim.
+    .clipAngle(179.5);
+  geoPath = d3.geoPath(proj);
+  return R;
+}
+
+// Pixel radius of a great-circle distance, straight from the projection's
+// defining property rather than by re-deriving the maths.
+function ringRadius(miles){
+  return proj.scale() * (miles / EARTH_MI);
+}
 var land = null;        // resolved once; the atlas is local and never changes
 var lastSig = null;
 var lastGood = null;
@@ -222,24 +254,41 @@ function renderHeader(){
 
 function drawMap(d){
   var svg = $('map');
+  svg.setAttribute('viewBox', '0 0 ' + MAP_W + ' ' + MAP_H);
   while(svg.firstChild) svg.removeChild(svg.firstChild);
 
-  svg.appendChild(el('path', {d: geoPath({type:'Sphere'}),
+  var R = setProjection(d.home);
+  var cx = MAP_W/2, cy = MAP_H/2;
+
+  svg.appendChild(el('circle', {cx:cx, cy:cy, r:R,
     fill:'rgba(255,255,255,0.025)', stroke:'rgba(253,248,229,0.12)', 'stroke-width':1}));
-  svg.appendChild(el('path', {d: geoPath(d3.geoGraticule10()),
+  svg.appendChild(el('path', {d: geoPath(d3.geoGraticule10()) || '',
     fill:'none', stroke:'rgba(253,248,229,0.06)', 'stroke-width':0.5}));
 
   if(land){
-    svg.appendChild(el('path', {d: geoPath(land), fill:'rgba(253,248,229,0.10)',
+    svg.appendChild(el('path', {d: geoPath(land) || '', fill:'rgba(253,248,229,0.10)',
       stroke:'rgba(253,248,229,0.22)', 'stroke-width':0.5}));
   }
 
-  // Great-circle arcs: a two-point LineString through geoPath, so D3's
-  // adaptive resampling bends it along the great circle for us.
-  (d.arcs||[]).forEach(function(a){
-    var p = geoPath({type:'LineString', coordinates:[a.from, a.to]});
-    if(p) svg.appendChild(el('path', {d:p, fill:'none', stroke:C_FRESH,
-                                      'stroke-width':1.2, opacity:0.45}));
+  // Distance rings, drawn over the land so they stay readable across it.
+  RINGS.forEach(function(mi){
+    var r = ringRadius(mi);
+    if(r >= R - 4) return;
+    svg.appendChild(el('circle', {cx:cx, cy:cy, r:r, fill:'none',
+      stroke:'rgba(224,165,46,0.30)', 'stroke-width':1,
+      'stroke-dasharray':'5 7'}));
+    // Labels sit due north of home. From EN82 that line runs up through
+    // Hudson Bay and the Arctic, which is the emptiest bearing on the board;
+    // south ran them through South America and west into the US cluster.
+    // paint-order:stroke draws a halo through the glyphs rather than a dark
+    // disc behind them, so the label survives a coastline without becoming
+    // a blob on the map.
+    var t = el('text', {x:cx, y:cy - r + 6, fill:'rgba(224,165,46,0.85)',
+      'font-family':"'Oswald',sans-serif", 'font-size':'17',
+      'text-anchor':'middle', stroke:'#152333', 'stroke-width':'4',
+      'stroke-linejoin':'round', 'paint-order':'stroke'});
+    t.textContent = num(mi) + ' mi';
+    svg.appendChild(t);
   });
 
   // Fresh grids last, so a recent contact is never hidden under an old one.
@@ -254,24 +303,38 @@ function drawMap(d){
       fill: p.fresh ? C_FRESH : C_WORKED}));
   });
 
-  if(d.home){
-    var h = proj([d.home.lon, d.home.lat]);
-    if(h && isFinite(h[0])){
-      svg.appendChild(el('rect', {x:h[0]-5.5, y:h[1]-5.5, width:11, height:11,
-        rx:2, fill:C_HOME, stroke:'#152333', 'stroke-width':1.5}));
-    }
-  }
+  // Home is the centre of this projection by construction.
+  svg.appendChild(el('rect', {x:cx-6, y:cy-6, width:12, height:12,
+    rx:2, fill:C_HOME, stroke:'#152333', 'stroke-width':1.5}));
 }
 
-function renderMedians(list){
-  var top = (list||[]).slice(0, MAX_MEDIANS);
-  var max = top.reduce(function(m,x){ return Math.max(m, x.miles); }, 0) || 1;
-  $('medians').innerHTML = top.map(function(x){
+function medianRows(list, label){
+  if(!list.length) return '';
+  // Each group is scaled to its own maximum. Sharing an axis with HF renders
+  // every VHF band as a 2px stub and says nothing about either.
+  var max = list.reduce(function(m,x){ return Math.max(m, x.miles); }, 0) || 1;
+  return '<div class="mdh">'+label+'</div>' + list.map(function(x){
     var w = Math.max(2, Math.round(100*x.miles/max));
     return '<div class="md"><div class="k">'+esc(x.band)+'</div>'
          + '<div class="tr"><div class="fl" style="width:'+w+'%"></div></div>'
          + '<div class="v">'+num(x.miles)+'<em>mi</em></div></div>';
   }).join('');
+}
+
+// Mirrors VHF_BANDS in collect.py. The collector labels each band, but
+// grids.json is only rewritten by the nightly FULL run, so the board splits
+// the groups itself rather than falling back to a single scale that squashes
+// every VHF band to a 3% stub for however long that takes.
+var VHF_BANDS = {'6m':1, '2m':1, '1.25m':1, '70cm':1, '33cm':1, '23cm':1, '13cm':1};
+function isVhf(x){
+  return x.group ? x.group === 'vhf' : !!VHF_BANDS[x.band];
+}
+
+function renderMedians(list){
+  list = list || [];
+  var hf  = list.filter(function(x){ return !isVhf(x); });
+  var vhf = list.filter(isVhf);
+  $('medians').innerHTML = medianRows(hf, 'HF') + medianRows(vhf, 'VHF and up');
 }
 
 function renderNewest(list){
@@ -330,7 +393,7 @@ function load(){
 /* ------------------------------------------------------------------ start */
 renderHeader();
 // The land layer is local, so this resolves immediately; the board still
-// renders points and arcs if it somehow does not.
+// renders the points if it somehow does not.
 fetch(WORLD_URL, {cache:'force-cache'})
   .then(function(r){ return r.json(); })
   .then(function(world){

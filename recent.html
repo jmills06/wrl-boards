@@ -41,34 +41,52 @@ html,body{background:#000;overflow:hidden;height:100%}
 .sh i{flex:1;height:1px;background:linear-gradient(90deg,rgba(255,112,48,.55),rgba(255,112,48,0))}
 
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 24px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 22px}
 .tile.hot{border-color:rgba(255,112,48,.55);background:linear-gradient(145deg,rgba(255,112,48,.16),rgba(255,112,48,.04))}
-.tile .n{font-family:'Oswald',sans-serif;font-weight:300;font-size:80px;line-height:.85}
+.tile .n{font-family:'Oswald',sans-serif;font-weight:300;font-size:70px;line-height:.85}
 .tile .l{font-size:14px;letter-spacing:3px;text-transform:uppercase;color:var(--c50);margin-top:8px}
 
-.days{display:flex;align-items:flex-end;gap:14px;height:168px}
-.day{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
-.day .c{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c80);margin-bottom:6px}
-.day .b{width:100%;background:rgba(255,112,48,.32);border-radius:6px 6px 0 0;min-height:4px}
-.day.today .b{background:var(--orange)}
-.day .l{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:1px;text-transform:uppercase;color:var(--c50);margin-top:8px}
-.day.today .l{color:var(--orange)}
+/* day strip under the tiles, one bar per day of the map window */
+.strip{display:flex;align-items:flex-end;gap:7px;height:76px}
+.sd{flex:1;background:rgba(255,112,48,.30);border-radius:4px 4px 0 0;min-height:3px}
+.sd.today{background:var(--orange)}
+.slab{display:flex;gap:7px;margin-top:6px}
+.slab div{flex:1;font-family:'Oswald',sans-serif;font-size:13px;color:var(--c50);text-align:center}
 
-/* 24 hour strip */
-#hours{display:grid;grid-template-columns:repeat(24,1fr);gap:5px;align-items:end;height:78px}
-#hours .hb{background:rgba(255,112,48,.30);border-radius:4px 4px 0 0;min-height:3px}
-#hours .hb.now{background:var(--orange)}
-#hlab{display:grid;grid-template-columns:repeat(24,1fr);gap:5px;margin-top:7px}
-#hlab div{font-family:'Oswald',sans-serif;font-size:14px;color:var(--c50);text-align:center}
+/* maps */
+.mapwrap{flex:1;display:flex;flex-direction:column;min-height:0}
+.mapbox{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.mapbox svg{display:block;width:100%;height:100%}
+.maprow{display:grid;grid-template-columns:1fr 330px;gap:18px}
+.side{display:flex;flex-direction:column}
 
-.log{display:flex;flex-direction:column;gap:8px}
-.row{display:grid;grid-template-columns:96px 210px 1fr 122px 112px;align-items:center;gap:12px;
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+.legend div{display:flex;align-items:center;gap:9px;font-size:15px;color:var(--c80)}
+.legend i{width:22px;height:4px;border-radius:2px;flex:none}
+
+.sites div{display:flex;align-items:center;gap:11px;padding:7px 0;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+.sites div:last-child{border-bottom:none}
+/* The number ties this row to the ring drawn on the map. Three POTA grids
+   within 150 miles cannot carry three labels at continent scale. */
+.sites .k{width:21px;height:21px;border-radius:50%;border:2px solid var(--gold);
+  color:var(--gold);font-family:'Oswald',sans-serif;font-size:13px;
+  display:flex;align-items:center;justify-content:center;flex:none}
+.sites .g{font-family:'Oswald',sans-serif;font-size:21px;letter-spacing:.5px}
+.sites .n{margin-left:auto;font-family:'Oswald',sans-serif;font-size:18px;color:var(--c50)}
+
+.log{display:flex;flex-direction:column;gap:7px}
+.row{display:grid;grid-template-columns:112px 196px 1fr 108px 104px;align-items:center;gap:12px;
   background:var(--card);border:1px solid var(--line);border-left:6px solid var(--c30);
-  border-radius:0 12px 12px 0;padding:11px 18px}
+  border-radius:0 12px 12px 0;padding:8px 18px}
 .row.m-cw{border-left-color:var(--cw)} .row.m-ssb{border-left-color:var(--ssb)}
 .row.m-fm{border-left-color:var(--fm)} .row.m-dig{border-left-color:var(--dig)}
-.row .tm{font-family:'Oswald',sans-serif;font-size:24px;font-weight:300;color:var(--c80)}
-.row .cs{font-family:'Oswald',sans-serif;font-size:30px;font-weight:600;letter-spacing:.5px}
+.row .tm{font-family:'Oswald',sans-serif;font-size:22px;font-weight:300;color:var(--c80)}
+/* A day only appears on rows that are not from today, so the eye is drawn to
+   exactly the rows that would otherwise mislead. */
+.row .tm em{font-style:normal;font-size:14px;color:var(--orange);
+  letter-spacing:1.5px;text-transform:uppercase;margin-right:6px}
+.row .cs{font-family:'Oswald',sans-serif;font-size:27px;font-weight:600;letter-spacing:.5px}
 .row .qth{font-size:16px;color:var(--c50);line-height:1.25}
 .row .qth b{display:block;color:var(--c80);font-weight:400;font-size:18px}
 .row .bm{text-align:right;font-family:'Oswald',sans-serif;font-size:21px;color:var(--c80)}
@@ -94,7 +112,7 @@ html,body{background:#000;overflow:hidden;height:100%}
   <div class="hdr z">
     <div>
       <div class="call">K8JKU</div>
-      <div class="sub">On the air &middot; last 7 days</div>
+      <div class="sub">On the air &middot; last 15 days</div>
     </div>
     <div class="hdr-r">
       <div class="t"><span id="clock">--:--</span><span style="font-size:22px;color:var(--c50)"> UTC</span></div>
@@ -103,23 +121,35 @@ html,body{background:#000;overflow:hidden;height:100%}
   </div>
 
   <div class="tiles z">
-    <div class="tile hot"><div class="n" id="tToday">&mdash;</div><div class="l">Today</div></div>
-    <div class="tile"><div class="n" id="tWeek">&mdash;</div><div class="l">This week</div></div>
-    <div class="tile"><div class="n" id="tMonth">&mdash;</div><div class="l">Last 30 days</div></div>
+    <div class="tile hot"><div class="n" id="tToday">&mdash;</div><div class="l" id="lToday">Today</div></div>
+    <div class="tile"><div class="n" id="tWeek">&mdash;</div><div class="l">Last 7 days</div></div>
+    <div class="tile"><div class="n" id="tWindow">&mdash;</div><div class="l" id="lWindow">Last 15 days</div></div>
   </div>
 
   <div class="z">
-    <div class="sh"><span>Daily count</span><i></i></div>
-    <div class="days" id="days"></div>
+    <div class="strip" id="strip"></div>
+    <div class="slab" id="slab"></div>
+  </div>
+
+  <div class="z mapwrap" id="regWrap">
+    <div class="sh"><span id="regTitle">Where they were</span><i></i></div>
+    <div class="mapbox" id="regBox" style="flex:1;min-height:0"><svg id="regMap" preserveAspectRatio="xMidYMid meet"></svg></div>
+  </div>
+
+  <div class="maprow z" id="dxWrap">
+    <div>
+      <div class="sh"><span id="dxTitle">DX &middot; rest of the world</span><i></i></div>
+      <div class="mapbox" id="wldBox" style="height:264px"><svg id="wldMap"></svg></div>
+    </div>
+    <div class="side">
+      <div class="sh"><span>Bands</span><i></i></div>
+      <div class="legend" id="legend"></div>
+      <div class="sh" style="margin-top:18px"><span>Operated from</span><i></i></div>
+      <div class="sites" id="sites"></div>
+    </div>
   </div>
 
   <div class="z">
-    <div class="sh"><span>Past 24 hours &middot; UTC</span><i></i></div>
-    <div id="hours"></div>
-    <div id="hlab"></div>
-  </div>
-
-  <div class="z" style="flex:1;display:flex;flex-direction:column;min-height:0">
     <div class="sh"><span>Latest contacts</span><i></i></div>
     <div class="log" id="log"></div>
   </div>
@@ -130,6 +160,9 @@ html,body{background:#000;overflow:hidden;height:100%}
   </div>
 
 </div></div>
+<script src="vendor/d3-array.min.js"></script>
+<script src="vendor/d3-geo.min.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
 <script>
 /* ------------------------------------------------------------------ tuning */
 var AUTO_FIT   = true;    // scale the 1080x1920 board to fill the viewport
@@ -140,6 +173,21 @@ var ROTATE     = 0;       // 0 | 90 | 180 | 270. Use only when the browser's
                           // viewport, 270 puts it on the LEFT. If the display
                           // comes out upside down, use the other one.
 var DATA_URL   = 'data/latest/recent.json';
+var WORLD_URL  = 'vendor/countries-110m.json';
+var STATES_URL = 'vendor/us-states-10m.json';
+var MAX_LOG    = 7;              // contact rows under the maps
+var MAX_LEGEND = 8;              // bands named in the legend
+
+// Fixed band -> colour. Deliberately NOT ranked by usage: a colour that moves
+// between bands as the month changes is a colour you cannot learn. 20m and 40m
+// carry most of the log, so they get the two most separable hues.
+var BAND_COLOR = {
+  '160m':'#c0392b', '80m':'#e05a2b', '60m':'#d97b2f', '40m':'#4a90e2',
+  '30m':'#3fa9b5',  '20m':'#ff7030', '17m':'#f5c542', '15m':'#2ecc71',
+  '12m':'#8bd450',  '10m':'#ffd166', '6m':'#ff5c8a',  '2m':'#9b59b6',
+  '1.25m':'#b07fd8','70cm':'#4ecdc4','other':'#8fa3b8'
+};
+function bandColor(b){ return BAND_COLOR[b] || BAND_COLOR.other; }
 var TICK_MS    = 1000;            // master tick: clock + fetch scheduling
 var REFRESH_MS = 5 * 60 * 1000;   // collector runs every 30 min; poll finer
 var STALE_AFTER = 6;              // ~30 min of failures before the badge
@@ -198,38 +246,183 @@ function renderHeader(){
                          + MONTHS[d.getUTCMonth()]+' '+d.getUTCFullYear();
 }
 
-function renderDays(daily){
+/* ------------------------------------------------------------------- maps */
+var SVGNS = 'http://www.w3.org/2000/svg';
+var world = null, states = null, statesMesh = null, pendingMap = null;
+
+function el(tag, attrs){
+  var e = document.createElementNS(SVGNS, tag);
+  for(var k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+// A MultiPoint sampled around the frame, NOT a Polygon. d3 treats GeoJSON
+// polygons as spherical, where winding order decides which side is the
+// interior, so a box wound the wrong way fits to the whole globe minus the
+// box. Points carry no winding, and sampling the edges rather than just the
+// corners matters because a conic projection bows the top and bottom edges.
+function frameSample(bb){
+  var w = bb[0][0], s = bb[0][1], e = bb[1][0], n = bb[1][1], pts = [], i;
+  for(i = 0; i <= 8; i++){
+    var lon = w + (e - w) * i / 8;
+    var lat = s + (n - s) * i / 8;
+    pts.push([lon, s], [lon, n], [w, lat], [e, lat]);
+  }
+  return {type:'MultiPoint', coordinates: pts};
+}
+
+// Albers for North America, which is what a conic projection is for. Anywhere
+// else, a conic fitted to that region's own latitudes: the collector only
+// moves this frame when the operating site leaves the continent.
+function regionalProjection(frame, W, H){
+  var bb = frame.bbox, p;
+  if(frame.mode === 'na'){
+    p = d3.geoAlbers();
+  } else {
+    var lon0 = (bb[0][0] + bb[1][0]) / 2;
+    var lat0 = (bb[0][1] + bb[1][1]) / 2;
+    var span = bb[1][1] - bb[0][1];
+    p = d3.geoConicEqualArea().rotate([-lon0, 0]).center([0, lat0])
+         .parallels([bb[0][1] + span/6, bb[1][1] - span/6]);
+  }
+  // Fit the WIDTH, not the whole frame. A conic bows the top and bottom edges
+  // of a wide lat/lon box outward, so fitting the box's full projected extent
+  // shrinks the continent to make room for curvature nobody wants to look at.
+  // Filling the width and centring on the frame's midpoint puts the land at a
+  // usable size; clipExtent trims whatever bows past the edges.
+  p.fitWidth(W - 20, frameSample(bb));
+  var mid = p([(bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2]);
+  var t = p.translate();
+  if(mid) p.translate([t[0], t[1] + (H / 2 - mid[1])]);
+  p.clipExtent([[0,0],[W,H]]);
+  return p;
+}
+
+function drawLand(svg, path, opts){
+  if(opts.sphere){
+    svg.appendChild(el('path', {d: path({type:'Sphere'}) || '',
+      fill:'rgba(10,20,32,.45)', stroke:'none'}));
+  }
+  svg.appendChild(el('path', {d: path(d3.geoGraticule10()) || '',
+    fill:'none', stroke:'rgba(253,248,229,.055)', 'stroke-width':.7}));
+  if(world){
+    svg.appendChild(el('path', {d: path(world) || '',
+      fill:'rgba(253,248,229,.10)', stroke:'rgba(253,248,229,.26)', 'stroke-width':.8}));
+  }
+  // State borders only where they can actually be resolved.
+  if(opts.states && statesMesh){
+    svg.appendChild(el('path', {d: path(statesMesh) || '',
+      fill:'none', stroke:'rgba(253,248,229,.17)', 'stroke-width':.7}));
+  }
+}
+
+function drawOrigins(svg, proj, origins){
+  origins.forEach(function(o, i){
+    var p = proj([o.lon, o.lat]);
+    if(!p) return;
+    svg.appendChild(el('circle', {cx:p[0], cy:p[1], r:11, fill:'none',
+      stroke:'#E0A52E', 'stroke-width':2.2}));
+    svg.appendChild(el('circle', {cx:p[0], cy:p[1], r:2.6, fill:'#E0A52E'}));
+    var t = el('text', {x:p[0], y:p[1]+4.6, fill:'#E0A52E', 'font-size':'12',
+      'font-family':"'Oswald',sans-serif", 'text-anchor':'middle'});
+    t.textContent = String(i + 1);
+    svg.appendChild(t);
+  });
+}
+
+function drawMap(svgId, boxId, m, wantRegion){
+  var svg = $(svgId), box = $(boxId);
+  var W = box.clientWidth, H = box.clientHeight;
+  if(!W || !H) return;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+  var proj = wantRegion
+    ? regionalProjection(m.frame, W, H)
+    : d3.geoNaturalEarth1().fitExtent([[8,8],[W-8,H-8]], {type:'Sphere'});
+  var path = d3.geoPath(proj);
+
+  drawLand(svg, path, {sphere: !wantRegion,
+                      states: wantRegion && m.frame.mode === 'na'});
+
+  // Bubbles sit under the arcs: they are the approximate layer, and they are
+  // the one thing on the map that should never draw the eye first.
+  (m.bubbles||[]).forEach(function(b){
+    if(!!b.region !== wantRegion) return;
+    var p = proj([b.lon, b.lat]);
+    if(!p) return;
+    svg.appendChild(el('circle', {cx:p[0], cy:p[1],
+      r: (3.5 + Math.sqrt(b.count) * 2.4).toFixed(1),
+      fill:'rgba(253,248,229,.11)', stroke:'rgba(253,248,229,.40)', 'stroke-width':1.1}));
+  });
+
+  (m.arcs||[]).forEach(function(a){
+    if(!!a.region !== wantRegion) return;
+    var o = (m.origins||[])[a.o];
+    if(!o) return;
+    var d = path({type:'LineString', coordinates:[[o.lon,o.lat],[a.lon,a.lat]]});
+    if(d){
+      svg.appendChild(el('path', {d:d, fill:'none', stroke:bandColor(a.band),
+        'stroke-width':1.3, 'stroke-opacity':.5, 'stroke-linecap':'round'}));
+    }
+    var p = proj([a.lon, a.lat]);
+    if(p){
+      svg.appendChild(el('circle', {cx:p[0], cy:p[1], r:2.7,
+        fill:bandColor(a.band), 'fill-opacity':.95}));
+    }
+  });
+
+  drawOrigins(svg, proj, m.origins||[]);
+}
+
+function renderMaps(m){
+  var on = !!(m && m.origins);
+  $('regWrap').style.display = on ? '' : 'none';
+  $('dxWrap').style.display  = on ? '' : 'none';
+  if(!on) return;
+  pendingMap = m;
+  if(!world) return;             // topojson still in flight; redraw on arrival
+  drawMap('regMap', 'regBox', m, true);
+  drawMap('wldMap', 'wldBox', m, false);
+
+  $('regTitle').textContent = m.frame && m.frame.mode === 'na'
+    ? 'North America \u00b7 last ' + m.window_days + ' days'
+    : 'Around the station \u00b7 last ' + m.window_days + ' days';
+
+  var dx = (m.arcs||[]).filter(function(a){ return !a.region; }).length
+         + (m.bubbles||[]).filter(function(b){ return !b.region; }).length;
+  $('dxTitle').textContent = dx
+    ? 'DX \u00b7 ' + dx + ' beyond the frame'
+    : 'DX \u00b7 none this window';
+
+  var bands = (m.bands||[]).slice(0, MAX_LEGEND);
+  $('legend').innerHTML = bands.map(function(b){
+    return '<div><i style="background:'+bandColor(b)+'"></i>'+esc(b)+'</div>';
+  }).join('');
+
+  $('sites').innerHTML = (m.origins||[]).map(function(o, i){
+    return '<div><div class="k">'+(i+1)+'</div><div class="g">'+esc(o.grid)+'</div>'
+         + '<div class="n">'+num(o.count)+'</div></div>';
+  }).join('') || '<div style="color:var(--c50);font-size:15px">No operating grid logged</div>';
+}
+
+function renderStrip(daily){
   daily = daily || [];
   var max = daily.reduce(function(m,d){ return Math.max(m, d.count); }, 0) || 1;
-  $('days').innerHTML = daily.map(function(d, i){
-    var isToday = (i === daily.length - 1);
-    var pct = Math.max(2, Math.round(100*d.count/max));
-    return '<div class="day'+(isToday?' today':'')+'">'
-         + '<div class="c">'+num(d.count)+'</div>'
-         + '<div class="b" style="height:'+pct+'%"></div>'
-         + '<div class="l">'+esc(d.label)+'</div></div>';
+  $('strip').innerHTML = daily.map(function(d){
+    var h = d.count ? Math.max(4, 100*d.count/max) : 0;
+    return '<div class="sd'+(d.label==='Today'?' today':'')
+         + '" style="height:'+h.toFixed(1)+'%"></div>';
+  }).join('');
+  // Label every third day plus today, so 15 bars do not become 15 labels.
+  $('slab').innerHTML = daily.map(function(d, i){
+    var show = d.label === 'Today' || (daily.length - 1 - i) % 3 === 0;
+    return '<div>'+(show ? (d.label==='Today' ? 'Today' : d.dom) : '')+'</div>';
   }).join('');
 }
 
-function renderHours(hourly, nowHour){
-  hourly = hourly || [];
-  if(hourly.length !== 24) return;
-  if(nowHour == null) nowHour = new Date().getUTCHours();
-  var max = Math.max.apply(null, hourly) || 1;
-  var bars = '', labs = '';
-  for(var i=0;i<24;i++){
-    // hourly is oldest-first and ends at the current hour.
-    var utc = (nowHour - 23 + i + 48) % 24;
-    var pct = Math.max(3, Math.round(hourly[i]/max*100));
-    bars += '<div class="hb'+(i===23?' now':'')+'" style="height:'+pct+'%"></div>';
-    labs += '<div>'+(utc%4===0 ? pad(utc) : '')+'</div>';
-  }
-  $('hours').innerHTML = bars;
-  $('hlab').innerHTML = labs;
-}
-
 function renderLog(contacts){
-  contacts = contacts || [];
+  contacts = (contacts || []).slice(0, MAX_LOG);
   $('log').innerHTML = contacts.map(function(c){
     var cls = MODE_CLASS[c.category] || '';
 
@@ -251,7 +444,7 @@ function renderLog(contacts){
       : num(c.distance)+'<em>mi</em>';
 
     return '<div class="row '+cls+'">'
-      + '<div class="tm">'+esc(c.time)+'</div>'
+      + '<div class="tm">'+(c.day ? '<em>'+esc(c.day)+'</em>' : '')+esc(c.time)+'</div>'
       + '<div class="cs">'+esc(c.call)+tag+'</div>'
       + '<div class="qth"><b>'+esc(c.place || c.country || '')+'</b>'+sub+'</div>'
       + '<div class="bm">'+esc(c.band||'')+'<em>'+esc(c.mode||'')+'</em></div>'
@@ -261,11 +454,24 @@ function renderLog(contacts){
 }
 
 function render(d){
-  $('tToday').textContent = num(d.today);
-  $('tWeek').textContent  = num(d.week);
-  $('tMonth').textContent = num(d.month);
-  renderDays(d.daily);
-  renderHours(d.hourly, d.now_hour);
+  $('tToday').textContent  = num(d.today);
+  $('tWeek').textContent   = num(d.week);
+  $('tWindow').textContent = num(d.window != null ? d.window : d.month);
+  if(d.window_days) $('lWindow').textContent = 'Last ' + d.window_days + ' days';
+
+  // A zero in the highlighted tile is not news on its own. When nothing has
+  // been logged today, the tile says how long it has actually been.
+  var lbl = 'Today';
+  if(!d.today && d.since_last_min != null){
+    var h = Math.floor(d.since_last_min / 60);
+    lbl = h < 1  ? 'Today'
+        : h < 48 ? h + 'h since last QSO'
+                 : Math.floor(h/24) + ' days since last QSO';
+  }
+  $('lToday').textContent = lbl;
+
+  renderStrip(d.daily);
+  renderMaps(d.map);
   renderLog(d.contacts);
 
   if(d.generated){
@@ -274,6 +480,25 @@ function render(d){
                                           + pad(g.getUTCMinutes())+' UTC';
   }
 }
+
+/* -------------------------------------------------------------- basemaps */
+// force-cache: these never change, and the Pi should not refetch 220KB every
+// time the board reloads.
+Promise.all([
+  fetch(WORLD_URL,  {cache:'force-cache'}).then(function(r){ return r.json(); }),
+  fetch(STATES_URL, {cache:'force-cache'}).then(function(r){ return r.json(); })
+]).then(function(res){
+  world  = topojson.feature(res[0], res[0].objects.countries);
+  states = res[1];
+  statesMesh = topojson.mesh(states, states.objects.states,
+                             function(a,b){ return a !== b; });
+  if(pendingMap) renderMaps(pendingMap);
+}).catch(function(){
+  // No basemap is survivable: the arcs and dots still carry the story, and a
+  // board with no coastlines beats a board with no maps.
+  world = world || {type:'FeatureCollection', features:[]};
+  if(pendingMap) renderMaps(pendingMap);
+});
 
 /* ------------------------------------------------------------------ fetch */
 function load(){

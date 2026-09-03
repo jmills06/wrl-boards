@@ -32,6 +32,7 @@ import argparse
 import json
 import math
 import os
+import random
 import sys
 import time
 from collections import Counter, defaultdict
@@ -52,7 +53,6 @@ RECENT_CONTACTS = 14
 RECENT_WINDOW_DAYS = 45
 # Widen to this if the window is too quiet to fill the contact list.
 RECENT_FALLBACK_DAYS = 400
-HEATMAP_BANDS = 8
 PAGE_SIZE = 100
 PAGE_SLEEP = 0.5
 
@@ -60,18 +60,70 @@ PAGE_SLEEP = 0.5
 MEDIAN_MIN_SAMPLES = 5
 # Unique grids listed in the "newest grids" panel.
 NEWEST_GRIDS = 8
-# Great-circle arcs drawn on the map.
-ARC_COUNT = 6
+# Window plotted on the recent board's maps, and its third tile.
+MAP_WINDOW_DAYS = 15
+# Contact rows listed under the maps. The maps are the board now; the list is
+# there for the callsigns, not to be the board itself.
+MAP_LIST_ROWS = 8
+# Bands named in the map legend. Anything rarer is drawn in the "other" colour.
+MAP_BANDS = 6
+# The regional map's default frame: lon/lat of the SW and NE corners. Sized to
+# the lower 48 and southern Canada, which is where the log actually is. Going
+# wider to catch the occasional Alaskan costs real estate on every single
+# render; those contacts land on the world map instead, which is what it is
+# for. Its aspect is ~1.8:1, matched by the map box below it.
+NA_FRAME = [[-126.0, 23.0], [-62.0, 51.0]]
+# Padding around the operating site when the regional map has to leave North
+# America, in degrees of lon/lat.
+FRAME_PAD = [24.0, 14.0]
+# Stations listed in the career board's furthest-contacts ladder.
+DX_LADDER = 8
 
 BASE_URL = "https://api.worldradioleague.com"
 TIMEOUT = (10, 60)            # (connect, read) — never a bare float
-MAX_RETRIES = 4
+MAX_RETRIES = 5
+BACKOFF_CAP = 30              # seconds; the curve never sleeps longer than this
+# Statuses worth a second look. The gateway in front of the API returns 502 for
+# a few seconds when it restarts, which is the whole reason this set exists.
+RETRY_STATUS = frozenset({408, 425, 500, 502, 503, 504})
 
 OUT_DIR = os.path.join("data", "latest")
 
 KM_TO_MILES = 0.621371
 
 # Logbooks excluded from every total. Contest logs only — see discovery.
+# Fallback position for a contact that logged a state or province but no
+# gridsquare. US values are the area-weighted centroid of each state's
+# largest landmass, derived from vendor/us-states-10m.json (so Michigan
+# lands in the Lower Peninsula, not a lake). Canadian values are
+# population centres: a province centroid would put every Ontario
+# contact several hundred miles north of every Ontario operator.
+STATE_CENTERS = {
+    "AB": (52.5, -113.7), "AK": (64.499, -152.695), "AL": (32.79, -86.828),
+    "AR": (34.9, -92.44), "AS": (-14.294, -170.705), "AZ": (34.293, -111.665),
+    "BC": (49.7, -123.0), "CA": (37.254, -119.612), "CO": (38.998, -105.548),
+    "CT": (41.62, -72.726), "DC": (38.904, -77.015), "DE": (38.993, -75.501),
+    "FL": (28.646, -82.503), "GA": (32.649, -83.446), "GU": (13.444, 144.775),
+    "HI": (19.602, -155.521), "IA": (42.074, -93.5), "ID": (44.389, -114.659),
+    "IL": (40.065, -89.199), "IN": (39.908, -86.276), "KS": (38.484, -98.38),
+    "KY": (37.527, -85.288), "LA": (31.054, -91.978), "MA": (42.27, -71.823),
+    "MB": (49.9, -97.1), "MD": (39.035, -76.77), "ME": (45.364, -69.225),
+    "MI": (43.483, -84.622), "MN": (46.316, -94.309), "MO": (38.367, -92.477),
+    "MP": (15.19, 145.75), "MS": (32.751, -89.665), "MT": (47.033, -109.645),
+    "NB": (46.2, -66.0), "NC": (35.54, -79.365), "ND": (47.446, -100.47),
+    "NE": (41.527, -99.81), "NH": (43.685, -71.578), "NJ": (40.183, -74.662),
+    "NL": (48.0, -56.0), "NM": (34.421, -106.108), "NS": (44.8, -63.3),
+    "NT": (62.5, -114.4), "NU": (63.7, -68.5), "NV": (39.355, -116.655),
+    "NY": (42.943, -75.505), "OH": (40.293, -82.79), "OK": (35.583, -97.508),
+    "ON": (44.0, -79.5), "OR": (43.936, -120.556), "PA": (40.874, -77.8),
+    "PE": (46.3, -63.2), "PR": (18.224, -66.475), "QC": (46.3, -72.5),
+    "RI": (41.694, -71.589), "SC": (33.907, -80.896), "SD": (44.436, -100.231),
+    "SK": (51.5, -105.8), "TN": (35.843, -86.344), "TX": (31.482, -99.349),
+    "UT": (39.323, -111.678), "VA": (37.513, -78.881), "VI": (17.73, -64.8),
+    "VT": (44.075, -72.663), "WA": (47.375, -120.433), "WI": (44.634, -90.012),
+    "WV": (38.641, -80.615), "WY": (42.999, -107.551), "YT": (60.7, -135.1),
+}
+
 EXCLUDED_LOGBOOKS = {
     "d0f88526-bf85-4114-bff1-390f8b55996c",   # K8JKU - CQ Worldwide DX, SSB
 }
@@ -136,6 +188,16 @@ STATE_ENTITIES = {291, 1, 6, 110}    # USA, Canada, Alaska, Hawaii
 
 
 # ---------------------------------------------------------------- helpers
+
+# 6m and up. A median distance on these bands is a statement about which
+# repeaters are in range, not about propagation, so they are scaled apart from
+# HF rather than compared with it.
+VHF_BANDS = frozenset({"6m", "2m", "1.25m", "70cm", "33cm", "23cm", "13cm"})
+
+
+def band_is_vhf(label):
+    return label in VHF_BANDS
+
 
 def band_label(band):
     """`band` is metres as a number: 20 -> '20m', 0.7 -> '70cm'."""
@@ -296,37 +358,87 @@ def build_session(key):
     return s
 
 
+def backoff(response, attempt):
+    """Sleep before the next attempt.
+
+    A server that sends Retry-After knows when it will be ready, so that wins
+    over any curve we could invent. Otherwise exponential, with jitter so that
+    a retry never lands on a round second alongside everyone else's, and
+    capped: the job has a timeout and a long sleep helps nobody.
+    """
+    raw = response.headers.get("Retry-After") if response is not None else None
+    if raw:
+        try:
+            wait = max(0, min(int(raw), BACKOFF_CAP))
+        except ValueError:
+            wait = None       # HTTP-date form; not worth parsing, use the curve
+        if wait is not None:
+            time.sleep(wait)
+            return
+    time.sleep(min(2 ** attempt, BACKOFF_CAP) + random.random())
+
+
 def get_page(session, params):
-    """One GET with retry. Honours Retry-After; never guesses a fixed timer."""
+    """One GET with retry. Honours Retry-After; never guesses a fixed timer.
+
+    Retried, because none of it means anything is actually wrong:
+
+      a dropped connection,
+      a 429,
+      a 5xx from the gateway in front of the API,
+      a body that will not parse as JSON.
+
+    That last one is the same event as the third. The gateway answers with an
+    HTML error page, so the 502 arrives as a decode failure rather than as a
+    status the old code looked at, and one blip mid-pagination killed the whole
+    run. A JSON API that answers with non-JSON is infrastructure talking, not
+    the API, and infrastructure recovers.
+
+    Not retried: 4xx other than 429. A revoked key or a malformed request fails
+    identically every time, so retrying only delays the report.
+    """
     url = BASE_URL + "/v1/contacts"
+    problem = "no attempt made"
+
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             r = session.get(url, params=params, timeout=TIMEOUT)
         except requests.exceptions.RequestException as exc:
-            if attempt == MAX_RETRIES:
-                raise CollectError(f"network failure after {attempt} attempts: {exc}")
-            time.sleep(2 ** attempt)
-            continue
-
-        if r.status_code == 429:
-            wait = int(r.headers.get("Retry-After") or 5)
-            print(f"    rate limited, sleeping {wait}s")
-            time.sleep(wait)
+            problem = f"network failure: {exc}"
+            if attempt < MAX_RETRIES:
+                print(f"    {problem} — retrying ({attempt}/{MAX_RETRIES - 1})")
+                backoff(None, attempt)
             continue
 
         try:
             body = r.json()
         except ValueError:
-            raise CollectError(f"non-JSON response (HTTP {r.status_code}) "
-                               f"X-Request-Id={r.headers.get('X-Request-Id')}")
+            body = None
 
         err = body.get("error") if isinstance(body, dict) else None
-        if r.status_code >= 400 or err:
-            code = (err or {}).get("code") if isinstance(err, dict) else None
-            raise CollectError(f"HTTP {r.status_code} code={code} "
-                               f"X-Request-Id={r.headers.get('X-Request-Id')}")
-        return body
-    raise CollectError("exhausted retries")
+        if r.status_code < 400 and body is not None and not err:
+            return body
+
+        rid = r.headers.get("X-Request-Id")
+        if r.status_code == 429:
+            problem = f"rate limited (HTTP 429) X-Request-Id={rid}"
+        elif body is None:
+            problem = (f"non-JSON response (HTTP {r.status_code}) "
+                       f"X-Request-Id={rid}")
+        else:
+            code = err.get("code") if isinstance(err, dict) else None
+            problem = f"HTTP {r.status_code} code={code} X-Request-Id={rid}"
+
+        transient = (r.status_code == 429 or r.status_code in RETRY_STATUS
+                     or body is None)
+        if not transient:
+            raise CollectError(problem)
+
+        if attempt < MAX_RETRIES:
+            print(f"    {problem} — retrying ({attempt}/{MAX_RETRIES - 1})")
+            backoff(r, attempt)
+
+    raise CollectError(f"{problem} — gave up after {MAX_RETRIES} attempts")
 
 
 def fetch_all(session, since=None, stop_before=None):
@@ -400,6 +512,9 @@ class Aggregate:
 
         self.total_miles = 0.0
         self.with_distance = 0
+        # Hour-by-band counts. No board renders these since the career
+        # heatmap came out; kept because it is cheap and the recent
+        # board is the obvious next home for it.
         self.heat = defaultdict(lambda: [0] * 24)
         self.band_distances = defaultdict(list)
 
@@ -524,8 +639,58 @@ class Aggregate:
 
 # ---------------------------------------------------------------- builders
 
+def month_series(by_date, first, now):
+    """Contiguous months from the first QSO to now, empty ones included.
+
+    A quiet month has to render as a short bar, not a missing one. Dropping
+    empty months would slide the remaining bars together and quietly redraw a
+    summer off the air as continuous activity.
+    """
+    if not first:
+        return []
+    counts = Counter()
+    for day, n in by_date.items():
+        counts[(day.year, day.month)] += n
+
+    out, y, m = [], first.year, first.month
+    while (y, m) <= (now.year, now.month):
+        out.append({"month": f"{y:04d}-{m:02d}", "count": counts.get((y, m), 0)})
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def build_dx_ladder(rows, limit=DX_LADDER):
+    """The furthest contacts, one row per station.
+
+    Deduplicated by callsign, keeping each station's best. Working the same
+    Australian eight times is one achievement, and eight identical rows is a
+    list, not a ladder.
+
+    Row 0 is by definition the single furthest contact ever made, which is why
+    `records` no longer carries a separate `furthest`.
+    """
+    best = {}
+    for r in rows:
+        call = (r.get("call") or "").strip().upper()
+        if not call or r.get("miles") is None:
+            continue
+        if call not in best or r["miles"] > best[call]["miles"]:
+            best[call] = r
+
+    top = sorted(best.values(), key=lambda r: -r["miles"])[:limit]
+    return [{
+        "call": r["call"],
+        "country": dxcc.country_for(r["dxcc"], r["call"], default=""),
+        "miles": round(r["miles"]),
+        "date": r["ts"].date().isoformat(),
+        "band": r["band"],
+        "mode": r["mode"],
+    } for r in top]
+
+
 def build_career(agg):
-    top_bands = [b for b, _ in agg.bands.most_common(HEATMAP_BANDS)]
+    months = month_series(agg.by_date, agg.first_qso, agg.now)
+    busiest = max(months, key=lambda m: m["count"], default=None)
     return {
         "generated": agg.now.isoformat(timespec="seconds"),
         "total_qsos": agg.total,
@@ -542,14 +707,15 @@ def build_career(agg):
         "mode_groups": [{"category": c, "count": n}
                         for c, n in agg.categories.most_common()],
         "records": {
-            "furthest": ({"miles": round(agg.furthest[0]),
-                          "call": agg.furthest[1],
-                          "date": agg.furthest[2].isoformat()}
-                         if agg.furthest else None),
+            # No "furthest" here any more: it is dx_ladder[0], and one fact
+            # with two sources in the same file drifts the moment one changes.
             "best_day": agg.best_day(),
             "longest_streak": agg.longest_streak(),
+            "active_days": len(agg.by_date),
+            "busiest_month": (busiest if busiest and busiest["count"] else None),
         },
-        "heatmap": {b: agg.heat[b] for b in top_bands},
+        "dx_ladder": build_dx_ladder(agg.rows),
+        "by_month": months,
         "by_year": [{"year": y, "count": agg.by_year[y]}
                     for y in sorted(agg.by_year)],
     }
@@ -567,11 +733,15 @@ def build_grids(agg):
     new_30d = sum(1 for g, (ts, _, _) in agg.grid_first_seen.items()
                   if ts >= agg.fresh_cutoff)
 
+    # HF and VHF+ are scaled separately on the board. A 4,160-sample 20m median
+    # and a 137-sample 70cm median are not the same kind of number, and on one
+    # axis every band above 50 MHz collapses to zero width.
     medians = []
     for b, ds in agg.band_distances.items():
         if len(ds) >= MEDIAN_MIN_SAMPLES:
             medians.append({"band": b, "miles": round(median(ds)),
-                            "samples": len(ds)})
+                            "samples": len(ds),
+                            "group": "vhf" if band_is_vhf(b) else "hf"})
     medians.sort(key=lambda m: -m["miles"])
 
     newest = sorted(agg.grid_first_seen.items(), key=lambda kv: kv[1][0],
@@ -579,38 +749,6 @@ def build_grids(agg):
 
     home = agg.home_grid()
     home_c = grid_center(home) if home else None
-
-    # Arcs originate at the QSO's OWN myGridsquare, not a fixed home point.
-    # 7.8% of the log was worked portable, and an arc drawn from Michigan for
-    # a contact made from Florida is simply a wrong line on a map.
-    def arc_for(r):
-        a = grid_center(r["my_grid"])
-        b = grid_center(r["grid"]) or grid_center(r["grid4"])
-        if not a or not b or r["miles"] is None:
-            return None
-        return {"from": [a[1], a[0]], "to": [b[1], b[0]],
-                "call": r["call"], "miles": round(r["miles"])}
-
-    recent = [r for r in agg.rows if r["ts"] >= agg.fresh_cutoff]
-    recent.sort(key=lambda r: -(r["miles"] or 0))
-    arcs, seen_calls = [], set()
-    for r in recent:
-        a = arc_for(r)
-        if a and a["call"] not in seen_calls:
-            arcs.append(a)
-            seen_calls.add(a["call"])
-        if len(arcs) >= ARC_COUNT:
-            break
-    if len(arcs) < ARC_COUNT:
-        # A quiet month should still draw a map with arcs on it.
-        rest = sorted(agg.rows, key=lambda r: -(r["miles"] or 0))
-        for r in rest:
-            a = arc_for(r)
-            if a and a["call"] not in seen_calls:
-                arcs.append(a)
-                seen_calls.add(a["call"])
-            if len(arcs) >= ARC_COUNT:
-                break
 
     return {
         "generated": agg.now.isoformat(timespec="seconds"),
@@ -622,13 +760,126 @@ def build_grids(agg):
         "home": ({"grid": home, "lat": home_c[0], "lon": home_c[1]}
                  if home_c else None),
         "points": points,
-        "arcs": arcs,
         "median_distance": medians,
         "newest_grids": [
             {"grid": g, "call": call, "country": dxcc.country_for(code, call),
              "date": ts.date().isoformat()}
             for g, (ts, call, code) in newest
         ],
+    }
+
+
+def locate(row):
+    """Best known position for a contact, as (lat, lon, precision).
+
+    Three sources, in descending order of what they actually claim:
+
+      grid   the other station's own locator, good to a few miles
+      state  a state or province centroid: "somewhere in Colorado"
+      dxcc   an entity centroid: "somewhere in Japan"
+
+    The precision travels with the point so the board can draw an honest mark.
+    Only a grid earns an arc; a centroid gets a bubble, because an arc drawn to
+    a centroid is a line to a place nobody was standing.
+    """
+    c = grid_center(row.get("grid")) or grid_center(row.get("grid4"))
+    if c:
+        return (c[0], c[1], "grid")
+
+    ab = (row.get("state") or "").strip().upper()
+    if ab in STATE_CENTERS:
+        lat, lon = STATE_CENTERS[ab]
+        return (lat, lon, "state")
+
+    c = dxcc.center(row.get("dxcc"))
+    if c:
+        return (c[0], c[1], "dxcc")
+    return None
+
+
+def inside(bbox, lon, lat):
+    (w, s), (e, n) = bbox
+    return w <= lon <= e and s <= lat <= n
+
+
+def region_frame(origins):
+    """Frame for the regional map.
+
+    North America by default, and pixel-identical day to day, which matters on
+    a wall: a map that reframes itself every half hour is a map you stop being
+    able to read. It only moves when the site most of the window's QSOs came
+    from is somewhere else entirely, which is the trip-abroad case.
+    """
+    if not origins:
+        return {"mode": "na", "bbox": NA_FRAME}
+
+    main = max(origins, key=lambda o: o["count"])
+    if inside(NA_FRAME, main["lon"], main["lat"]):
+        return {"mode": "na", "bbox": NA_FRAME}
+
+    px, py = FRAME_PAD
+    return {"mode": "fit", "bbox": [
+        [round(main["lon"] - px, 2), round(max(-85.0, main["lat"] - py), 2)],
+        [round(main["lon"] + px, 2), round(min(85.0, main["lat"] + py), 2)]]}
+
+
+def build_map(agg, rows, bands_order):
+    """Arcs, bubbles and operating sites for the two maps.
+
+    Everything carries a `region` flag: true items belong on the regional map,
+    false ones on the world map, which shows nothing but the DX so it is not a
+    smaller, worse copy of the map beside it.
+    """
+    # Operating sites, most-used first. A contact with no myGridsquare is
+    # assumed to be from the busiest site rather than dropped.
+    sites = {}
+    for r in rows:
+        c = grid_center(r.get("my_grid"))
+        if not c:
+            continue
+        key = str(r["my_grid"]).strip().upper()
+        o = sites.setdefault(key, {"grid": key, "lat": round(c[0], 3),
+                                   "lon": round(c[1], 3), "count": 0})
+        o["count"] += 1
+    origins = sorted(sites.values(), key=lambda o: -o["count"])
+    index = {o["grid"]: i for i, o in enumerate(origins)}
+    frame = region_frame(origins)
+
+    band_rank = {b: i for i, b in enumerate(bands_order)}
+    arcs, bubbles = [], {}
+    for r in rows:
+        pos = locate(r)
+        if not pos:
+            continue
+        lat, lon, prec = pos
+        home = str(r.get("my_grid") or "").strip().upper()
+        oi = index.get(home, 0 if origins else None)
+
+        if prec == "grid" and oi is not None:
+            arcs.append({
+                "o": oi,
+                "lat": round(lat, 2), "lon": round(lon, 2),
+                "band": r["band"],
+                "region": inside(frame["bbox"], lon, lat),
+            })
+        else:
+            # Many contacts share one centroid, so they are counted into a
+            # single bubble rather than stacked as identical invisible dots.
+            key = (round(lat, 2), round(lon, 2))
+            b = bubbles.setdefault(key, {
+                "lat": key[0], "lon": key[1], "count": 0,
+                "region": inside(frame["bbox"], lon, lat),
+            })
+            b["count"] += 1
+
+    arcs.sort(key=lambda a: band_rank.get(a["band"], len(band_rank)))
+    return {
+        "window_days": MAP_WINDOW_DAYS,
+        "frame": frame,
+        "origins": origins,
+        "arcs": arcs,
+        "bubbles": sorted(bubbles.values(), key=lambda b: -b["count"]),
+        "bands": bands_order,
     }
 
 
@@ -643,17 +894,27 @@ def build_recent(agg, known=None):
     today = now.date()
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+    map_start = now - timedelta(days=MAP_WINDOW_DAYS)
     counts = {
         "today": sum(1 for r in agg.rows if r["ts"] >= day_start),
         "week": sum(1 for r in agg.rows if r["ts"] >= now - timedelta(days=7)),
+        "window": sum(1 for r in agg.rows if r["ts"] >= map_start),
         "month": sum(1 for r in agg.rows if r["ts"] >= now - timedelta(days=30)),
     }
 
+    # The maps plot the whole window, not just the rows the list shows.
+    map_rows = [r for r in agg.rows if r["ts"] >= map_start]
+    band_counts = Counter(r["band"] for r in map_rows if r["band"])
+    bands_order = [b for b, _ in band_counts.most_common()]
+
+    # One entry per day across the map window, so the strip under the tiles
+    # covers the same span the maps do.
     daily = []
-    for i in range(6, -1, -1):
+    for i in range(MAP_WINDOW_DAYS - 1, -1, -1):
         d = today - timedelta(days=i)
         daily.append({
             "label": "Today" if i == 0 else d.strftime("%a"),
+            "dom": d.day,
             "date": d.isoformat(),
             "count": agg.by_date.get(d, 0),
         })
@@ -671,6 +932,7 @@ def build_recent(agg, known=None):
     known_g = (known or {}).get("grids")
 
     recent_rows = agg.rows[-RECENT_CONTACTS:][::-1]
+    today_iso = today.isoformat()
     contacts = []
     for r in recent_rows:
         code = r["dxcc"]
@@ -687,8 +949,12 @@ def build_recent(agg, known=None):
             new_grid = bool(r["grid4"] and first_g == r["ts"]
                             and r["grid4"] not in known_g)
 
+        d = r["ts"].date()
         contacts.append({
             "time": r["ts"].strftime("%H:%M"),
+            "date": d.isoformat(),
+            # Empty for today, so only rows that need explaining carry a day.
+            "day": "" if d.isoformat() == today_iso else d.strftime("%a"),
             "call": r["call"],
             "country": dxcc.country_for(code, r["call"]),
             "place": place_name(code, r["state"], r["call"]),
@@ -703,15 +969,22 @@ def build_recent(agg, known=None):
             "new_grid": new_grid,
         })
 
+    last = agg.rows[-1]["ts"] if agg.rows else None
     return {
         "generated": now.isoformat(timespec="seconds"),
         "today": counts["today"],
         "week": counts["week"],
+        "window": counts["window"],
         "month": counts["month"],
+        "window_days": MAP_WINDOW_DAYS,
+        # Minutes since the last QSO, so the board can say how cold the log is
+        # instead of leaving a reader to work it out from a bare timestamp.
+        "since_last_min": (int((now - last).total_seconds() // 60) if last else None),
         "daily": daily,
         "hourly": hourly,
         "now_hour": now.hour,
         "contacts": contacts,
+        "map": build_map(agg, map_rows, bands_order),
     }
 
 
@@ -825,18 +1098,28 @@ def report(agg, career, grids, recent):
     print(f"  continents          : {career['continent_count']}/{career['continent_total']}")
     print(f"  distance total      : {career['total_distance']:,} mi "
           f"(from {agg.with_distance:,} contacts)")
-    f = career["records"]["furthest"]
-    if f:
+    ladder = career["dx_ladder"]
+    if ladder:
+        f = ladder[0]
         print(f"  furthest            : {f['miles']:,} mi  {f['call']}  {f['date']}")
+        print(f"  dx ladder           : {len(ladder)} stations, "
+              f"down to {ladder[-1]['miles']:,} mi")
     b = career["records"]["best_day"]
     if b:
         print(f"  best day            : {b['count']} on {b['date']}")
     print(f"  longest streak      : {career['records']['longest_streak']} days")
+    print(f"  active days         : {career['records']['active_days']:,}")
+    bm = career["records"]["busiest_month"]
+    if bm:
+        print(f"  busiest month       : {bm['month']}  {bm['count']:,}")
+    print(f"  months tracked      : {len(career['by_month'])}")
     print(f"  bands / modes       : {len(career['bands'])} / {len(career['modes'])}")
     print(f"  map points          : {len(grids['points']):,}  "
           f"fresh {sum(1 for p in grids['points'] if p['fresh'])}  "
           f"new in {FRESH_DAYS}d {grids['new_30d']}")
-    print(f"  map arcs            : {len(grids['arcs'])}")
+    hf = [m for m in grids["median_distance"] if m["group"] == "hf"]
+    vhf = [m for m in grids["median_distance"] if m["group"] == "vhf"]
+    print(f"  medians             : {len(hf)} HF, {len(vhf)} VHF+")
     print(f"  recent today/week   : {recent['today']} / {recent['week']}")
 
     unknown = sorted({m["mode"] for m in career["modes"]
@@ -950,6 +1233,12 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="write even if validation objects")
     args = ap.parse_args()
+
+    # In CI stdout is a pipe and therefore block-buffered, while stderr is not.
+    # The failure line then lands above the progress it followed, which reads
+    # as if the run failed before it started. Line buffering keeps the log in
+    # the order the run actually happened.
+    sys.stdout.reconfigure(line_buffering=True)
 
     key = os.environ.get("WRL_API_KEY", "").strip()
     if not key:

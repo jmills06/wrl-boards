@@ -56,18 +56,33 @@ html,body{background:#000;overflow:hidden;height:100%}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px}
 
-.band{display:grid;grid-template-columns:52px 1fr 68px;align-items:center;gap:10px;margin-bottom:11px}
-.band:last-child{margin-bottom:0}
-.band .bn{font-family:'Oswald',sans-serif;font-size:20px;color:var(--c80);text-align:right}
-.band .tr{height:14px;background:rgba(255,255,255,.06);border-radius:7px;overflow:hidden}
-.band .fl{height:100%;background:var(--orange);border-radius:7px}
-.band .bv{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c50);text-align:right}
-
 .mbar{display:flex;height:34px;border-radius:8px;overflow:hidden;margin-bottom:16px}
-.mleg{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.mleg{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px}
 .mleg div{display:flex;align-items:center;gap:9px;font-size:16px;color:var(--c80)}
 .dot{width:12px;height:12px;border-radius:3px;flex:none}
 .mleg b{margin-left:auto;font-family:'Oswald',sans-serif;font-weight:400;color:var(--cream)}
+
+/* furthest-contacts ladder */
+#dx .dxr{display:grid;grid-template-columns:28px 128px 1fr 104px 116px 128px;
+  align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+#dx .dxr:last-child{border-bottom:none;padding-bottom:0}
+#dx .rk{font-family:'Oswald',sans-serif;font-size:17px;color:var(--c50);text-align:right}
+#dx .cs{font-family:'Oswald',sans-serif;font-size:23px;letter-spacing:.5px}
+#dx .co{font-size:16px;color:var(--c80);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#dx .bm,#dx .dt{font-size:15px;color:var(--c50);text-align:right;white-space:nowrap}
+#dx .mi{font-family:'Oswald',sans-serif;font-size:23px;color:var(--gold);text-align:right}
+#dx .mi em{font-style:normal;font-size:14px;color:var(--c50);margin-left:5px}
+#dx .top .cs{color:var(--gold)}
+
+/* month-by-month activity */
+.mos{display:flex;align-items:flex-end;gap:3px;height:172px}
+.mo{flex:1;background:rgba(255,112,48,.34);border-radius:3px 3px 0 0;min-height:2px}
+.mo.jan{background:rgba(255,112,48,.52)}
+.mo.cur{background:var(--orange)}
+#mlab{display:flex;gap:3px;margin-top:7px;height:16px}
+#mlab .ml{flex:1;position:relative}
+#mlab .ml span{position:absolute;left:50%;transform:translateX(-50%);
+  font-family:'Oswald',sans-serif;font-size:14px;color:var(--c50);white-space:nowrap}
 
 .rec{display:flex;align-items:baseline;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.07)}
 .rec:last-child{border-bottom:none;padding-bottom:0}
@@ -76,21 +91,17 @@ html,body{background:#000;overflow:hidden;height:100%}
 .rec .v em{font-style:normal;font-size:16px;color:var(--c50);margin-left:8px;font-weight:300}
 .gold{color:var(--gold)}
 
-/* heatmap */
-#heat{display:grid;grid-template-columns:54px repeat(24,1fr);gap:4px;align-items:center}
-#heat .hb{font-family:'Oswald',sans-serif;font-size:19px;color:var(--c80);text-align:right;padding-right:6px}
-#heat .cell{height:38px;border-radius:4px;background:rgba(255,255,255,.045)}
-#heat .hh{font-family:'Oswald',sans-serif;font-size:14px;color:var(--c50);text-align:center;padding-top:4px}
-.hkey{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-top:12px;font-size:14px;
-  letter-spacing:2px;text-transform:uppercase;color:var(--c50)}
-.hkey i{width:26px;height:12px;border-radius:3px;display:inline-block}
-
-.yrs{display:flex;align-items:flex-end;gap:11px;height:120px;padding-top:6px}
-.yr{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
-.yr .b{width:100%;background:rgba(255,112,48,.35);border-radius:5px 5px 0 0}
+.yrs{display:flex;align-items:stretch;gap:14px;height:282px;padding-top:4px}
+.yr{flex:1;display:flex;flex-direction:column;align-items:center}
+.yr .tk{position:relative;width:100%;flex:1}
+.yr .b,.yr .pc{position:absolute;left:0;right:0;bottom:0;border-radius:6px 6px 0 0}
+.yr .b{background:rgba(255,112,48,.35)}
 .yr.now .b{background:var(--orange)}
-.yr .y{font-family:'Oswald',sans-serif;font-size:15px;color:var(--c50);margin-top:8px}
-.yr .c{font-family:'Oswald',sans-serif;font-size:15px;color:var(--c80);margin-bottom:5px}
+/* Dashed, because a projection is not a measurement. */
+.yr .pc{border:2px dashed rgba(255,112,48,.45);border-bottom:none;background:rgba(255,112,48,.05)}
+.yr .y{font-family:'Oswald',sans-serif;font-size:17px;color:var(--c50);margin-top:9px}
+.yr .c{font-family:'Oswald',sans-serif;font-size:18px;color:var(--c80);margin-bottom:7px;white-space:nowrap}
+.yr .c em{font-style:normal;font-size:15px;color:var(--orange);margin-left:6px}
 
 .ftr{margin-top:auto;display:flex;justify-content:space-between;align-items:center;
   font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:var(--c30);
@@ -137,32 +148,26 @@ html,body{background:#000;overflow:hidden;height:100%}
 
   <div class="cols z">
     <div class="panel">
-      <div class="sh"><span>Bands</span><i></i></div>
-      <div id="bands"></div>
-    </div>
-
-    <div class="panel">
       <div class="sh"><span>Modes</span><i></i></div>
       <div class="mbar" id="mbar"></div>
       <div class="mleg" id="mleg"></div>
-      <div style="height:20px"></div>
+    </div>
+
+    <div class="panel">
       <div class="sh"><span>Records</span><i></i></div>
       <div id="records"></div>
     </div>
   </div>
 
-  <div class="z">
-    <div class="sh"><span>When you operate &middot; UTC hour by band</span><i></i></div>
-    <div id="heat"></div>
-    <div class="hkey">
-      <span>Fewer</span>
-      <i style="background:rgba(255,255,255,.045)"></i>
-      <i style="background:rgba(255,112,48,.28)"></i>
-      <i style="background:rgba(255,112,48,.55)"></i>
-      <i style="background:rgba(255,112,48,.82)"></i>
-      <i style="background:#ff7030"></i>
-      <span>More</span>
-    </div>
+  <div class="z" id="dxBlock">
+    <div class="sh"><span>Furthest contacts &middot; one row per station</span><i></i></div>
+    <div id="dx"></div>
+  </div>
+
+  <div class="z" id="moBlock">
+    <div class="sh"><span>Month by month</span><i></i></div>
+    <div class="mos" id="months"></div>
+    <div id="mlab"></div>
   </div>
 
   <div class="z">
@@ -189,8 +194,11 @@ var DATA_URL   = 'data/latest/career.json';
 var TICK_MS    = 1000;           // master tick: clock + fetch scheduling
 var REFRESH_MS = 10 * 60 * 1000; // career data changes nightly
 var STALE_AFTER = 3;             // consecutive failures before the badge
-var MAX_BANDS  = 8;              // bands panel rows
-var MAX_MODES  = 4;              // mode legend entries
+var MAX_MODES  = 10;             // mode legend entries; the log has 9
+var MAX_DX     = 8;              // rows in the furthest-contacts ladder
+// Days into the year before a year-end projection means anything. Two weeks of
+// January is not a trend, and an early bad week would libel the whole year.
+var PACE_MIN_DAYS = 45;
 var CAT_COLOR  = {cw:'#4a90e2', ssb:'#ff7030', fm:'#9b59b6', dig:'#2ecc71'};
 var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -243,6 +251,12 @@ function fmtDate(iso){
   if(p.length !== 3) return '';
   return pad(+p[2])+' '+MONTHS[+p[1]-1]+' '+p[0];
 }
+// '2024-08' -> 'Aug 2024'
+function fmtMonth(m){
+  var p = String(m||'').split('-');
+  if(p.length < 2) return '';
+  return MONTHS[+p[1]-1]+' '+p[0];
+}
 function esc(s){
   return String(s==null?'':s).replace(/[&<>"]/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
@@ -263,15 +277,49 @@ function renderHeader(){
                          + MONTHS[d.getUTCMonth()]+' '+d.getUTCFullYear();
 }
 
-function renderBands(bands){
-  var top = (bands||[]).slice(0, MAX_BANDS);
-  var max = top.reduce(function(m,b){ return Math.max(m, b.count); }, 0) || 1;
-  $('bands').innerHTML = top.map(function(b){
-    var w = Math.max(2, Math.round(100*b.count/max));
-    return '<div class="band"><div class="bn">'+esc(b.band)+'</div>'
-         + '<div class="tr"><div class="fl" style="width:'+w+'%"></div></div>'
-         + '<div class="bv">'+num(b.count)+'</div></div>';
+// Both new blocks hide rather than render an empty header. career.json only
+// grows these fields on the next FULL collector run, and until then a bare
+// section heading over nothing reads as a broken board.
+function show(id, on){ $(id).style.display = on ? '' : 'none'; }
+
+function renderDx(rows){
+  rows = (rows||[]).slice(0, MAX_DX);
+  show('dxBlock', rows.length > 0);
+  if(!rows.length){ $('dx').innerHTML = ''; return; }
+  $('dx').innerHTML = rows.map(function(d, i){
+    var bm = [d.band, d.mode].filter(Boolean).join(' \u00b7 ');
+    return '<div class="dxr'+(i===0?' top':'')+'">'
+         + '<div class="rk">'+(i+1)+'</div>'
+         + '<div class="cs">'+esc(d.call)+'</div>'
+         + '<div class="co">'+esc(d.country||'')+'</div>'
+         + '<div class="bm">'+esc(bm)+'</div>'
+         + '<div class="dt">'+fmtDate(d.date)+'</div>'
+         + '<div class="mi">'+num(d.miles)+'<em>mi</em></div>'
+         + '</div>';
   }).join('');
+}
+
+function renderMonths(months){
+  months = months || [];
+  show('moBlock', months.length > 0);
+  if(!months.length){ $('months').innerHTML = $('mlab').innerHTML = ''; return; }
+  var max = months.reduce(function(m,x){ return Math.max(m, x.count); }, 0) || 1;
+  var cur = months.length ? months[months.length-1].month : null;
+  var bars = '', labs = '';
+  months.forEach(function(x, i){
+    var jan = x.month.slice(5) === '01';
+    var cls = 'mo' + (x.month === cur ? ' cur' : (jan ? ' jan' : ''));
+    // An empty month keeps its slot and collapses to the 2px floor in CSS:
+    // a gap has to look like a gap, not like a month that never existed.
+    var h = x.count ? Math.max(3, 100*x.count/max) : 0;
+    bars += '<div class="'+cls+'" style="height:'+h.toFixed(1)+'%"></div>';
+    // Label every January, plus the first month, which is rarely a January.
+    labs += '<div class="ml">'
+          + ((jan || i===0) ? '<span>'+x.month.slice(0,4)+'</span>' : '')
+          + '</div>';
+  });
+  $('months').innerHTML = bars;
+  $('mlab').innerHTML = labs;
 }
 
 function renderModes(groups, modes){
@@ -288,54 +336,63 @@ function renderModes(groups, modes){
   }).join('');
 }
 
+function rec(label, value, note, gold){
+  return '<div class="rec"><div class="k">'+label+'</div>'
+       + '<div class="v'+(gold?' gold':'')+'">'+value
+       + (note ? '<em>'+note+'</em>' : '')+'</div></div>';
+}
+
 function renderRecords(r){
   r = r || {};
   var h = '';
-  if(r.furthest){
-    h += '<div class="rec"><div class="k">Furthest</div><div class="v gold">'
-       + num(r.furthest.miles)+'<em>mi &middot; '+esc(r.furthest.call)+'</em></div></div>';
-  }
+  // Furthest is deliberately absent: it is row 1 of the ladder below, with the
+  // country, band and date the one-line record could never fit.
   if(r.best_day){
-    h += '<div class="rec"><div class="k">Best day</div><div class="v gold">'
-       + num(r.best_day.count)+'<em>QSOs &middot; '+fmtDate(r.best_day.date)+'</em></div></div>';
+    h += rec('Best day', num(r.best_day.count),
+             'QSOs &middot; '+fmtDate(r.best_day.date), true);
   }
-  h += '<div class="rec"><div class="k">Longest streak</div><div class="v">'
-     + num(r.longest_streak)+'<em>days</em></div></div>';
+  h += rec('Longest streak', num(r.longest_streak), 'days', false);
+  if(r.active_days != null){
+    h += rec('Days on the air', num(r.active_days), 'days', false);
+  }
+  if(r.busiest_month){
+    h += rec('Busiest month', num(r.busiest_month.count),
+             'QSOs &middot; '+fmtMonth(r.busiest_month.month), true);
+  }
   $('records').innerHTML = h;
 }
 
-function renderHeat(heat){
-  heat = heat || {};
-  var bands = Object.keys(heat), h = '', max = 0;
-  bands.forEach(function(b){
-    heat[b].forEach(function(v){ if(v>max) max = v; });
-  });
-  if(!max) max = 1;
-  bands.forEach(function(b){
-    h += '<div class="hb">'+esc(b)+'</div>';
-    heat[b].forEach(function(v){
-      var bg = 'rgba(255,255,255,.045)';
-      if(v>0){
-        var r = Math.pow(v/max, 0.55);
-        bg = r>0.92 ? '#ff7030' : 'rgba(255,112,48,'+(0.14+r*0.72).toFixed(3)+')';
-      }
-      h += '<div class="cell" style="background:'+bg+'"></div>';
-    });
-  });
-  h += '<div></div>';
-  for(var i=0;i<24;i++){ h += '<div class="hh">'+(i%3===0 ? pad(i) : '')+'</div>'; }
-  $('heat').innerHTML = h;
+// Year-end projection for the year in progress, so a partial year is not read
+// as a collapse every January. Straight-line on the year so far; it makes no
+// attempt to model season, which is why it is drawn dashed and labelled.
+function paceFor(years, curYear){
+  var cur = years.filter(function(y){ return y.year === curYear; })[0];
+  if(!cur || !cur.count) return null;
+  var elapsed = (Date.now() - Date.UTC(curYear,0,1)) / 86400000;
+  if(elapsed < PACE_MIN_DAYS) return null;
+  var len = ((curYear%4===0 && curYear%100!==0) || curYear%400===0) ? 366 : 365;
+  return Math.round(cur.count / elapsed * len);
 }
 
 function renderYears(years){
   years = years || [];
-  var max = years.reduce(function(m,y){ return Math.max(m, y.count); }, 0) || 1;
-  var now = new Date().getUTCFullYear();
+  var curYear = new Date().getUTCFullYear();
+  var pace = paceFor(years, curYear);
+
+  // The projection scales the axis too, or the ghost would clip at the top.
+  var max = years.reduce(function(m,y){ return Math.max(m, y.count); }, 0);
+  max = Math.max(max, pace || 0) || 1;
+
   $('years').innerHTML = years.map(function(y){
-    var pct = Math.max(2, Math.round(100*y.count/max));
-    return '<div class="yr'+(y.year===now?' now':'')+'">'
-         + '<div class="c">'+num(y.count)+'</div>'
-         + '<div class="b" style="height:'+pct+'%"></div>'
+    var isNow = y.year === curYear;
+    var ghost = (isNow && pace && pace > y.count)
+      ? '<div class="pc" style="height:'+(100*pace/max).toFixed(1)+'%"></div>' : '';
+    return '<div class="yr'+(isNow?' now':'')+'">'
+         + '<div class="c">'+num(y.count)
+         + (ghost ? '<em>&rarr; '+num(pace)+'</em>' : '')+'</div>'
+         + '<div class="tk">'+ghost
+         + '<div class="b" style="height:'+Math.max(1,100*y.count/max).toFixed(1)+'%"></div>'
+         + '</div>'
          + '<div class="y">'+y.year+'</div></div>';
   }).join('');
 }
@@ -351,10 +408,10 @@ function render(d){
   var o = odometer(d.total_distance);
   $('miles').innerHTML      = o.v + (o.u ? '<small>'+o.u+'</small>' : '');
 
-  renderBands(d.bands);
   renderModes(d.mode_groups, d.modes);
   renderRecords(d.records);
-  renderHeat(d.heatmap);
+  renderDx(d.dx_ladder);
+  renderMonths(d.by_month);
   renderYears(d.by_year);
 
   if(d.generated){

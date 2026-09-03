@@ -6,3 +6,7 @@ data/latest/*.tmp
 
 # local discovery output
 discovery*.txt
+
+# Board screenshots taken while iterating on a design. They are working
+# files, not board assets: the boards render from data/latest/*.json.
+*.png
