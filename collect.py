@@ -60,6 +60,22 @@ PAGE_SLEEP = 0.5
 MEDIAN_MIN_SAMPLES = 5
 # Unique grids listed in the "newest grids" panel.
 NEWEST_GRIDS = 8
+# Window plotted on the recent board's maps, and its third tile.
+MAP_WINDOW_DAYS = 15
+# Contact rows listed under the maps. The maps are the board now; the list is
+# there for the callsigns, not to be the board itself.
+MAP_LIST_ROWS = 8
+# Bands named in the map legend. Anything rarer is drawn in the "other" colour.
+MAP_BANDS = 6
+# The regional map's default frame: lon/lat of the SW and NE corners. Sized to
+# the lower 48 and southern Canada, which is where the log actually is. Going
+# wider to catch the occasional Alaskan costs real estate on every single
+# render; those contacts land on the world map instead, which is what it is
+# for. Its aspect is ~1.8:1, matched by the map box below it.
+NA_FRAME = [[-126.0, 23.0], [-62.0, 51.0]]
+# Padding around the operating site when the regional map has to leave North
+# America, in degrees of lon/lat.
+FRAME_PAD = [24.0, 14.0]
 # Stations listed in the career board's furthest-contacts ladder.
 DX_LADDER = 8
 # Great-circle arcs drawn on the map.
@@ -78,6 +94,38 @@ OUT_DIR = os.path.join("data", "latest")
 KM_TO_MILES = 0.621371
 
 # Logbooks excluded from every total. Contest logs only — see discovery.
+# Fallback position for a contact that logged a state or province but no
+# gridsquare. US values are the area-weighted centroid of each state's
+# largest landmass, derived from vendor/us-states-10m.json (so Michigan
+# lands in the Lower Peninsula, not a lake). Canadian values are
+# population centres: a province centroid would put every Ontario
+# contact several hundred miles north of every Ontario operator.
+STATE_CENTERS = {
+    "AB": (52.5, -113.7), "AK": (64.499, -152.695), "AL": (32.79, -86.828),
+    "AR": (34.9, -92.44), "AS": (-14.294, -170.705), "AZ": (34.293, -111.665),
+    "BC": (49.7, -123.0), "CA": (37.254, -119.612), "CO": (38.998, -105.548),
+    "CT": (41.62, -72.726), "DC": (38.904, -77.015), "DE": (38.993, -75.501),
+    "FL": (28.646, -82.503), "GA": (32.649, -83.446), "GU": (13.444, 144.775),
+    "HI": (19.602, -155.521), "IA": (42.074, -93.5), "ID": (44.389, -114.659),
+    "IL": (40.065, -89.199), "IN": (39.908, -86.276), "KS": (38.484, -98.38),
+    "KY": (37.527, -85.288), "LA": (31.054, -91.978), "MA": (42.27, -71.823),
+    "MB": (49.9, -97.1), "MD": (39.035, -76.77), "ME": (45.364, -69.225),
+    "MI": (43.483, -84.622), "MN": (46.316, -94.309), "MO": (38.367, -92.477),
+    "MP": (15.19, 145.75), "MS": (32.751, -89.665), "MT": (47.033, -109.645),
+    "NB": (46.2, -66.0), "NC": (35.54, -79.365), "ND": (47.446, -100.47),
+    "NE": (41.527, -99.81), "NH": (43.685, -71.578), "NJ": (40.183, -74.662),
+    "NL": (48.0, -56.0), "NM": (34.421, -106.108), "NS": (44.8, -63.3),
+    "NT": (62.5, -114.4), "NU": (63.7, -68.5), "NV": (39.355, -116.655),
+    "NY": (42.943, -75.505), "OH": (40.293, -82.79), "OK": (35.583, -97.508),
+    "ON": (44.0, -79.5), "OR": (43.936, -120.556), "PA": (40.874, -77.8),
+    "PE": (46.3, -63.2), "PR": (18.224, -66.475), "QC": (46.3, -72.5),
+    "RI": (41.694, -71.589), "SC": (33.907, -80.896), "SD": (44.436, -100.231),
+    "SK": (51.5, -105.8), "TN": (35.843, -86.344), "TX": (31.482, -99.349),
+    "UT": (39.323, -111.678), "VA": (37.513, -78.881), "VI": (17.73, -64.8),
+    "VT": (44.075, -72.663), "WA": (47.375, -120.433), "WI": (44.634, -90.012),
+    "WV": (38.641, -80.615), "WY": (42.999, -107.551), "YT": (60.7, -135.1),
+}
+
 EXCLUDED_LOGBOOKS = {
     "d0f88526-bf85-4114-bff1-390f8b55996c",   # K8JKU - CQ Worldwide DX, SSB
 }
@@ -742,6 +790,120 @@ def build_grids(agg):
     }
 
 
+def locate(row):
+    """Best known position for a contact, as (lat, lon, precision).
+
+    Three sources, in descending order of what they actually claim:
+
+      grid   the other station's own locator, good to a few miles
+      state  a state or province centroid: "somewhere in Colorado"
+      dxcc   an entity centroid: "somewhere in Japan"
+
+    The precision travels with the point so the board can draw an honest mark.
+    Only a grid earns an arc; a centroid gets a bubble, because an arc drawn to
+    a centroid is a line to a place nobody was standing.
+    """
+    c = grid_center(row.get("grid")) or grid_center(row.get("grid4"))
+    if c:
+        return (c[0], c[1], "grid")
+
+    ab = (row.get("state") or "").strip().upper()
+    if ab in STATE_CENTERS:
+        lat, lon = STATE_CENTERS[ab]
+        return (lat, lon, "state")
+
+    c = dxcc.center(row.get("dxcc"))
+    if c:
+        return (c[0], c[1], "dxcc")
+    return None
+
+
+def inside(bbox, lon, lat):
+    (w, s), (e, n) = bbox
+    return w <= lon <= e and s <= lat <= n
+
+
+def region_frame(origins):
+    """Frame for the regional map.
+
+    North America by default, and pixel-identical day to day, which matters on
+    a wall: a map that reframes itself every half hour is a map you stop being
+    able to read. It only moves when the site most of the window's QSOs came
+    from is somewhere else entirely, which is the trip-abroad case.
+    """
+    if not origins:
+        return {"mode": "na", "bbox": NA_FRAME}
+
+    main = max(origins, key=lambda o: o["count"])
+    if inside(NA_FRAME, main["lon"], main["lat"]):
+        return {"mode": "na", "bbox": NA_FRAME}
+
+    px, py = FRAME_PAD
+    return {"mode": "fit", "bbox": [
+        [round(main["lon"] - px, 2), round(max(-85.0, main["lat"] - py), 2)],
+        [round(main["lon"] + px, 2), round(min(85.0, main["lat"] + py), 2)]]}
+
+
+def build_map(agg, rows, bands_order):
+    """Arcs, bubbles and operating sites for the two maps.
+
+    Everything carries a `region` flag: true items belong on the regional map,
+    false ones on the world map, which shows nothing but the DX so it is not a
+    smaller, worse copy of the map beside it.
+    """
+    # Operating sites, most-used first. A contact with no myGridsquare is
+    # assumed to be from the busiest site rather than dropped.
+    sites = {}
+    for r in rows:
+        c = grid_center(r.get("my_grid"))
+        if not c:
+            continue
+        key = str(r["my_grid"]).strip().upper()
+        o = sites.setdefault(key, {"grid": key, "lat": round(c[0], 3),
+                                   "lon": round(c[1], 3), "count": 0})
+        o["count"] += 1
+    origins = sorted(sites.values(), key=lambda o: -o["count"])
+    index = {o["grid"]: i for i, o in enumerate(origins)}
+    frame = region_frame(origins)
+
+    band_rank = {b: i for i, b in enumerate(bands_order)}
+    arcs, bubbles = [], {}
+    for r in rows:
+        pos = locate(r)
+        if not pos:
+            continue
+        lat, lon, prec = pos
+        home = str(r.get("my_grid") or "").strip().upper()
+        oi = index.get(home, 0 if origins else None)
+
+        if prec == "grid" and oi is not None:
+            arcs.append({
+                "o": oi,
+                "lat": round(lat, 2), "lon": round(lon, 2),
+                "band": r["band"],
+                "region": inside(frame["bbox"], lon, lat),
+            })
+        else:
+            # Many contacts share one centroid, so they are counted into a
+            # single bubble rather than stacked as identical invisible dots.
+            key = (round(lat, 2), round(lon, 2))
+            b = bubbles.setdefault(key, {
+                "lat": key[0], "lon": key[1], "count": 0,
+                "region": inside(frame["bbox"], lon, lat),
+            })
+            b["count"] += 1
+
+    arcs.sort(key=lambda a: band_rank.get(a["band"], len(band_rank)))
+    return {
+        "window_days": MAP_WINDOW_DAYS,
+        "frame": frame,
+        "origins": origins,
+        "arcs": arcs,
+        "bubbles": sorted(bubbles.values(), key=lambda b: -b["count"]),
+        "bands": bands_order,
+    }
+
+
 def build_recent(agg, known=None):
     """known: {"entities": set, "grids": set} from the last full run.
 
@@ -753,17 +915,27 @@ def build_recent(agg, known=None):
     today = now.date()
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+    map_start = now - timedelta(days=MAP_WINDOW_DAYS)
     counts = {
         "today": sum(1 for r in agg.rows if r["ts"] >= day_start),
         "week": sum(1 for r in agg.rows if r["ts"] >= now - timedelta(days=7)),
+        "window": sum(1 for r in agg.rows if r["ts"] >= map_start),
         "month": sum(1 for r in agg.rows if r["ts"] >= now - timedelta(days=30)),
     }
 
+    # The maps plot the whole window, not just the rows the list shows.
+    map_rows = [r for r in agg.rows if r["ts"] >= map_start]
+    band_counts = Counter(r["band"] for r in map_rows if r["band"])
+    bands_order = [b for b, _ in band_counts.most_common()]
+
+    # One entry per day across the map window, so the strip under the tiles
+    # covers the same span the maps do.
     daily = []
-    for i in range(6, -1, -1):
+    for i in range(MAP_WINDOW_DAYS - 1, -1, -1):
         d = today - timedelta(days=i)
         daily.append({
             "label": "Today" if i == 0 else d.strftime("%a"),
+            "dom": d.day,
             "date": d.isoformat(),
             "count": agg.by_date.get(d, 0),
         })
@@ -781,6 +953,7 @@ def build_recent(agg, known=None):
     known_g = (known or {}).get("grids")
 
     recent_rows = agg.rows[-RECENT_CONTACTS:][::-1]
+    today_iso = today.isoformat()
     contacts = []
     for r in recent_rows:
         code = r["dxcc"]
@@ -797,8 +970,12 @@ def build_recent(agg, known=None):
             new_grid = bool(r["grid4"] and first_g == r["ts"]
                             and r["grid4"] not in known_g)
 
+        d = r["ts"].date()
         contacts.append({
             "time": r["ts"].strftime("%H:%M"),
+            "date": d.isoformat(),
+            # Empty for today, so only rows that need explaining carry a day.
+            "day": "" if d.isoformat() == today_iso else d.strftime("%a"),
             "call": r["call"],
             "country": dxcc.country_for(code, r["call"]),
             "place": place_name(code, r["state"], r["call"]),
@@ -813,15 +990,22 @@ def build_recent(agg, known=None):
             "new_grid": new_grid,
         })
 
+    last = agg.rows[-1]["ts"] if agg.rows else None
     return {
         "generated": now.isoformat(timespec="seconds"),
         "today": counts["today"],
         "week": counts["week"],
+        "window": counts["window"],
         "month": counts["month"],
+        "window_days": MAP_WINDOW_DAYS,
+        # Minutes since the last QSO, so the board can say how cold the log is
+        # instead of leaving a reader to work it out from a bare timestamp.
+        "since_last_min": (int((now - last).total_seconds() // 60) if last else None),
         "daily": daily,
         "hourly": hourly,
         "now_hour": now.hour,
         "contacts": contacts,
+        "map": build_map(agg, map_rows, bands_order),
     }
 
 
