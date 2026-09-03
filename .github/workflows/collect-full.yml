@@ -1,9 +1,26 @@
 name: Collect full log
 
-# No `schedule:` here on purpose. GitHub's built-in cron is unreliable and
-# skips runs under load. An external scheduler (cron-job.org) calls this via
-# the workflow_dispatch API instead, which fires on time.
+# Nightly, on GitHub's own cron.
+#
+# The 30-minute recent collector deliberately does NOT use `schedule:`, because
+# GitHub queues scheduled runs and drops them under load, and a board that is
+# meant to be half an hour old going four hours stale is the whole problem.
+# That argument does not carry here. This run owns career.json and grids.json,
+# which describe the entire log and move slowly; a nightly rebuild that lands
+# twenty minutes late, or skips to the following night, costs nothing visible.
+# Not worth a second external scheduler to avoid.
+#
+# Two things to know about `schedule:`. It only fires from the DEFAULT BRANCH,
+# so this has no effect until it is on main. And GitHub disables scheduled
+# workflows after 60 days without repository activity, which this repo cannot
+# hit while the recent collector is committing every half hour.
 on:
+  schedule:
+    # 08:17 UTC = 04:17 EDT / 03:17 EST. Deliberately off the hour: :00 is
+    # GitHub's busiest scheduling slot and the one that slips worst. Also
+    # lands between the recent collector's :00 and :30 runs, which share the
+    # wrl-collect concurrency group with this one.
+    - cron: '17 8 * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -51,6 +68,10 @@ jobs:
             echo "::error::WRL_API_KEY secret is not set on this repository."
             exit 1
           fi
+          # On a scheduled run the `inputs` context is empty, so inputs.force
+          # is null, the && short-circuits, and this expands to no flag at
+          # all. Validation therefore still guards the nightly run; --force
+          # only ever reaches it from a deliberate manual dispatch.
           python collect.py --mode=full ${{ inputs.force && '--force' || '' }}
 
       - name: Commit and push
