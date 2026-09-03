@@ -53,7 +53,6 @@ RECENT_CONTACTS = 14
 RECENT_WINDOW_DAYS = 45
 # Widen to this if the window is too quiet to fill the contact list.
 RECENT_FALLBACK_DAYS = 400
-HEATMAP_BANDS = 8
 PAGE_SIZE = 100
 PAGE_SLEEP = 0.5
 
@@ -61,6 +60,8 @@ PAGE_SLEEP = 0.5
 MEDIAN_MIN_SAMPLES = 5
 # Unique grids listed in the "newest grids" panel.
 NEWEST_GRIDS = 8
+# Stations listed in the career board's furthest-contacts ladder.
+DX_LADDER = 8
 # Great-circle arcs drawn on the map.
 ARC_COUNT = 6
 
@@ -455,6 +456,9 @@ class Aggregate:
 
         self.total_miles = 0.0
         self.with_distance = 0
+        # Hour-by-band counts. No board renders these since the career
+        # heatmap came out; kept because it is cheap and the recent
+        # board is the obvious next home for it.
         self.heat = defaultdict(lambda: [0] * 24)
         self.band_distances = defaultdict(list)
 
@@ -579,8 +583,58 @@ class Aggregate:
 
 # ---------------------------------------------------------------- builders
 
+def month_series(by_date, first, now):
+    """Contiguous months from the first QSO to now, empty ones included.
+
+    A quiet month has to render as a short bar, not a missing one. Dropping
+    empty months would slide the remaining bars together and quietly redraw a
+    summer off the air as continuous activity.
+    """
+    if not first:
+        return []
+    counts = Counter()
+    for day, n in by_date.items():
+        counts[(day.year, day.month)] += n
+
+    out, y, m = [], first.year, first.month
+    while (y, m) <= (now.year, now.month):
+        out.append({"month": f"{y:04d}-{m:02d}", "count": counts.get((y, m), 0)})
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def build_dx_ladder(rows, limit=DX_LADDER):
+    """The furthest contacts, one row per station.
+
+    Deduplicated by callsign, keeping each station's best. Working the same
+    Australian eight times is one achievement, and eight identical rows is a
+    list, not a ladder.
+
+    Row 0 is by definition the single furthest contact ever made, which is why
+    `records` no longer carries a separate `furthest`.
+    """
+    best = {}
+    for r in rows:
+        call = (r.get("call") or "").strip().upper()
+        if not call or r.get("miles") is None:
+            continue
+        if call not in best or r["miles"] > best[call]["miles"]:
+            best[call] = r
+
+    top = sorted(best.values(), key=lambda r: -r["miles"])[:limit]
+    return [{
+        "call": r["call"],
+        "country": dxcc.country_for(r["dxcc"], r["call"], default=""),
+        "miles": round(r["miles"]),
+        "date": r["ts"].date().isoformat(),
+        "band": r["band"],
+        "mode": r["mode"],
+    } for r in top]
+
+
 def build_career(agg):
-    top_bands = [b for b, _ in agg.bands.most_common(HEATMAP_BANDS)]
+    months = month_series(agg.by_date, agg.first_qso, agg.now)
+    busiest = max(months, key=lambda m: m["count"], default=None)
     return {
         "generated": agg.now.isoformat(timespec="seconds"),
         "total_qsos": agg.total,
@@ -597,14 +651,15 @@ def build_career(agg):
         "mode_groups": [{"category": c, "count": n}
                         for c, n in agg.categories.most_common()],
         "records": {
-            "furthest": ({"miles": round(agg.furthest[0]),
-                          "call": agg.furthest[1],
-                          "date": agg.furthest[2].isoformat()}
-                         if agg.furthest else None),
+            # No "furthest" here any more: it is dx_ladder[0], and one fact
+            # with two sources in the same file drifts the moment one changes.
             "best_day": agg.best_day(),
             "longest_streak": agg.longest_streak(),
+            "active_days": len(agg.by_date),
+            "busiest_month": (busiest if busiest and busiest["count"] else None),
         },
-        "heatmap": {b: agg.heat[b] for b in top_bands},
+        "dx_ladder": build_dx_ladder(agg.rows),
+        "by_month": months,
         "by_year": [{"year": y, "count": agg.by_year[y]}
                     for y in sorted(agg.by_year)],
     }
@@ -880,13 +935,21 @@ def report(agg, career, grids, recent):
     print(f"  continents          : {career['continent_count']}/{career['continent_total']}")
     print(f"  distance total      : {career['total_distance']:,} mi "
           f"(from {agg.with_distance:,} contacts)")
-    f = career["records"]["furthest"]
-    if f:
+    ladder = career["dx_ladder"]
+    if ladder:
+        f = ladder[0]
         print(f"  furthest            : {f['miles']:,} mi  {f['call']}  {f['date']}")
+        print(f"  dx ladder           : {len(ladder)} stations, "
+              f"down to {ladder[-1]['miles']:,} mi")
     b = career["records"]["best_day"]
     if b:
         print(f"  best day            : {b['count']} on {b['date']}")
     print(f"  longest streak      : {career['records']['longest_streak']} days")
+    print(f"  active days         : {career['records']['active_days']:,}")
+    bm = career["records"]["busiest_month"]
+    if bm:
+        print(f"  busiest month       : {bm['month']}  {bm['count']:,}")
+    print(f"  months tracked      : {len(career['by_month'])}")
     print(f"  bands / modes       : {len(career['bands'])} / {len(career['modes'])}")
     print(f"  map points          : {len(grids['points']):,}  "
           f"fresh {sum(1 for p in grids['points'] if p['fresh'])}  "
