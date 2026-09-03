@@ -32,6 +32,7 @@ import argparse
 import json
 import math
 import os
+import random
 import sys
 import time
 from collections import Counter, defaultdict
@@ -65,7 +66,11 @@ ARC_COUNT = 6
 
 BASE_URL = "https://api.worldradioleague.com"
 TIMEOUT = (10, 60)            # (connect, read) — never a bare float
-MAX_RETRIES = 4
+MAX_RETRIES = 5
+BACKOFF_CAP = 30              # seconds; the curve never sleeps longer than this
+# Statuses worth a second look. The gateway in front of the API returns 502 for
+# a few seconds when it restarts, which is the whole reason this set exists.
+RETRY_STATUS = frozenset({408, 425, 500, 502, 503, 504})
 
 OUT_DIR = os.path.join("data", "latest")
 
@@ -296,37 +301,87 @@ def build_session(key):
     return s
 
 
+def backoff(response, attempt):
+    """Sleep before the next attempt.
+
+    A server that sends Retry-After knows when it will be ready, so that wins
+    over any curve we could invent. Otherwise exponential, with jitter so that
+    a retry never lands on a round second alongside everyone else's, and
+    capped: the job has a timeout and a long sleep helps nobody.
+    """
+    raw = response.headers.get("Retry-After") if response is not None else None
+    if raw:
+        try:
+            wait = max(0, min(int(raw), BACKOFF_CAP))
+        except ValueError:
+            wait = None       # HTTP-date form; not worth parsing, use the curve
+        if wait is not None:
+            time.sleep(wait)
+            return
+    time.sleep(min(2 ** attempt, BACKOFF_CAP) + random.random())
+
+
 def get_page(session, params):
-    """One GET with retry. Honours Retry-After; never guesses a fixed timer."""
+    """One GET with retry. Honours Retry-After; never guesses a fixed timer.
+
+    Retried, because none of it means anything is actually wrong:
+
+      a dropped connection,
+      a 429,
+      a 5xx from the gateway in front of the API,
+      a body that will not parse as JSON.
+
+    That last one is the same event as the third. The gateway answers with an
+    HTML error page, so the 502 arrives as a decode failure rather than as a
+    status the old code looked at, and one blip mid-pagination killed the whole
+    run. A JSON API that answers with non-JSON is infrastructure talking, not
+    the API, and infrastructure recovers.
+
+    Not retried: 4xx other than 429. A revoked key or a malformed request fails
+    identically every time, so retrying only delays the report.
+    """
     url = BASE_URL + "/v1/contacts"
+    problem = "no attempt made"
+
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             r = session.get(url, params=params, timeout=TIMEOUT)
         except requests.exceptions.RequestException as exc:
-            if attempt == MAX_RETRIES:
-                raise CollectError(f"network failure after {attempt} attempts: {exc}")
-            time.sleep(2 ** attempt)
-            continue
-
-        if r.status_code == 429:
-            wait = int(r.headers.get("Retry-After") or 5)
-            print(f"    rate limited, sleeping {wait}s")
-            time.sleep(wait)
+            problem = f"network failure: {exc}"
+            if attempt < MAX_RETRIES:
+                print(f"    {problem} — retrying ({attempt}/{MAX_RETRIES - 1})")
+                backoff(None, attempt)
             continue
 
         try:
             body = r.json()
         except ValueError:
-            raise CollectError(f"non-JSON response (HTTP {r.status_code}) "
-                               f"X-Request-Id={r.headers.get('X-Request-Id')}")
+            body = None
 
         err = body.get("error") if isinstance(body, dict) else None
-        if r.status_code >= 400 or err:
-            code = (err or {}).get("code") if isinstance(err, dict) else None
-            raise CollectError(f"HTTP {r.status_code} code={code} "
-                               f"X-Request-Id={r.headers.get('X-Request-Id')}")
-        return body
-    raise CollectError("exhausted retries")
+        if r.status_code < 400 and body is not None and not err:
+            return body
+
+        rid = r.headers.get("X-Request-Id")
+        if r.status_code == 429:
+            problem = f"rate limited (HTTP 429) X-Request-Id={rid}"
+        elif body is None:
+            problem = (f"non-JSON response (HTTP {r.status_code}) "
+                       f"X-Request-Id={rid}")
+        else:
+            code = err.get("code") if isinstance(err, dict) else None
+            problem = f"HTTP {r.status_code} code={code} X-Request-Id={rid}"
+
+        transient = (r.status_code == 429 or r.status_code in RETRY_STATUS
+                     or body is None)
+        if not transient:
+            raise CollectError(problem)
+
+        if attempt < MAX_RETRIES:
+            print(f"    {problem} — retrying ({attempt}/{MAX_RETRIES - 1})")
+            backoff(r, attempt)
+
+    raise CollectError(f"{problem} — gave up after {MAX_RETRIES} attempts")
 
 
 def fetch_all(session, since=None, stop_before=None):
@@ -950,6 +1005,12 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="write even if validation objects")
     args = ap.parse_args()
+
+    # In CI stdout is a pipe and therefore block-buffered, while stderr is not.
+    # The failure line then lands above the progress it followed, which reads
+    # as if the run failed before it started. Line buffering keeps the log in
+    # the order the run actually happened.
+    sys.stdout.reconfigure(line_buffering=True)
 
     key = os.environ.get("WRL_API_KEY", "").strip()
     if not key:
