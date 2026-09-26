@@ -167,6 +167,13 @@ function fit(){
   var f = document.getElementById('fit');
   if(!f) return;
 
+  // A hidden or not-yet-sized frame reports a 0x0 viewport. Scaling to that
+  // shrinks the board to nothing, which shows as a black screen until some
+  // later resize happens to fire. Keep the last good transform instead; the
+  // tick below re-fits as soon as a real size appears.
+  if(!innerWidth || !innerHeight) return;
+  fitW = innerWidth; fitH = innerHeight;
+
   // Footprint after rotation: at 90/270 the board's width and height swap.
   var swap = (ROTATE === 90 || ROTATE === 270);
   var bw = swap ? 1920 : 1080;
@@ -190,6 +197,7 @@ function fit(){
   f.style.top  = '0';
   f.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+s+')'+rot;
 }
+var fitW = 0, fitH = 0;             // viewport the current transform was built for
 addEventListener('resize', fit); fit();
 
 /* --------------------------------------------------------------- helpers */
@@ -405,6 +413,9 @@ fetch(WORLD_URL, {cache:'force-cache'})
 
 setInterval(function(){
   ticks++;
+  // Do not rely on the resize event alone: a player that shows a preloaded
+  // or hidden frame may never fire one, and the board would stay blank.
+  if(innerWidth !== fitW || innerHeight !== fitH) fit();
   renderHeader();
   if(ticks % Math.round(REFRESH_MS/TICK_MS) === 0) load();
 }, TICK_MS);
