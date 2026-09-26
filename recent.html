@@ -55,8 +55,13 @@ html,body{background:#000;overflow:hidden;height:100%}
 
 /* maps */
 .mapwrap{flex:1;display:flex;flex-direction:column;min-height:0}
-.mapbox{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.mapbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:5px}
 .mapbox svg{display:block;width:100%;height:100%}
+/* No overflow:hidden here. Clipping detailed map paths to a rounded corner
+   is what the Pi's GPU rasteriser intermittently fails on, and the failure
+   blacks out the whole board, not just the map. The 5px padding keeps the
+   square map inside the 16px corner radius (16 - 16/sqrt2 = 4.7px) so
+   nothing needs clipping; the SVG's own viewport clips to its rectangle. */
 .maprow{display:grid;grid-template-columns:1fr 330px;gap:18px}
 .side{display:flex;flex-direction:column}
 
@@ -200,6 +205,13 @@ function fit(){
   var f = document.getElementById('fit');
   if(!f) return;
 
+  // A hidden or not-yet-sized frame reports a 0x0 viewport. Scaling to that
+  // shrinks the board to nothing, which shows as a black screen until some
+  // later resize happens to fire. Keep the last good transform instead; the
+  // tick below re-fits as soon as a real size appears.
+  if(!innerWidth || !innerHeight) return;
+  fitW = innerWidth; fitH = innerHeight;
+
   // Footprint after rotation: at 90/270 the board's width and height swap.
   var swap = (ROTATE === 90 || ROTATE === 270);
   var bw = swap ? 1920 : 1080;
@@ -223,6 +235,7 @@ function fit(){
   f.style.top  = '0';
   f.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+s+')'+rot;
 }
+var fitW = 0, fitH = 0;             // viewport the current transform was built for
 addEventListener('resize', fit); fit();
 
 /* --------------------------------------------------------------- helpers */
@@ -332,8 +345,10 @@ function drawOrigins(svg, proj, origins){
 
 function drawMap(svgId, boxId, m, wantRegion){
   var svg = $(svgId), box = $(boxId);
-  var W = box.clientWidth, H = box.clientHeight;
-  if(!W || !H) return;
+  // clientWidth includes the box's padding; the SVG gets what is inside it.
+  var W = box.clientWidth - 10, H = box.clientHeight - 10;
+  if(W <= 0 || H <= 0) return;
+  svg.setAttribute('data-size', box.clientWidth + 'x' + box.clientHeight);
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
   while(svg.firstChild) svg.removeChild(svg.firstChild);
 
@@ -373,6 +388,14 @@ function drawMap(svgId, boxId, m, wantRegion){
   });
 
   drawOrigins(svg, proj, m.origins||[]);
+}
+
+function mapsNeedRedraw(){
+  return [['regMap','regBox'], ['wldMap','wldBox']].some(function(p){
+    var box = $(p[1]);
+    return box.clientWidth > 10 && box.clientHeight > 10 &&
+           $(p[0]).getAttribute('data-size') !== box.clientWidth + 'x' + box.clientHeight;
+  });
 }
 
 function renderMaps(m){
@@ -530,6 +553,12 @@ renderHeader();
 load();
 setInterval(function(){
   ticks++;
+  // Do not rely on the resize event alone: a player that shows a preloaded
+  // or hidden frame may never fire one, and the board would stay blank.
+  if(innerWidth !== fitW || innerHeight !== fitH) fit();
+  // Maps drawn while the page was hidden come out empty (the boxes measure
+  // 0x0) and nothing else would redraw them until the data changes.
+  if(pendingMap && world && mapsNeedRedraw()) renderMaps(pendingMap);
   renderHeader();
   if(ticks % Math.round(REFRESH_MS/TICK_MS) === 0) load();
 }, TICK_MS);
