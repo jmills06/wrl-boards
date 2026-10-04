@@ -45,6 +45,7 @@ truststore.inject_into_ssl()   # before requests builds its SSL context
 import requests  # noqa: E402
 
 import dxcc
+from callbook import Callbook
 
 # ---------------------------------------------------------------- tuning
 
@@ -88,6 +89,10 @@ BACKOFF_CAP = 30              # seconds; the curve never sleeps longer than this
 RETRY_STATUS = frozenset({408, 425, 500, 502, 503, 504})
 
 OUT_DIR = os.path.join("data", "latest")
+
+# License-address lookups for map placement. Set in main(); None leaves the
+# map on logged data alone.
+CALLBOOK = None
 
 KM_TO_MILES = 0.621371
 
@@ -772,11 +777,12 @@ def build_grids(agg):
 def locate(row):
     """Best known position for a contact, as (lat, lon, precision).
 
-    Three sources, in descending order of what they actually claim:
+    Four sources, in descending order of what they actually claim:
 
-      grid   the other station's own locator, good to a few miles
-      state  a state or province centroid: "somewhere in Colorado"
-      dxcc   an entity centroid: "somewhere in Japan"
+      grid      the other station's own locator, good to a few miles
+      callbook  a US license address, usually where the station is
+      state     a state or province centroid: "somewhere in Colorado"
+      dxcc      an entity centroid: "somewhere in Japan"
 
     Every source gets the same arc on the map. A centroid is an estimate, but
     at map scale it lands close enough to tell the story of the contact.
@@ -786,6 +792,12 @@ def locate(row):
         return (c[0], c[1], "grid")
 
     ab = (row.get("state") or "").strip().upper()
+
+    # A logged state that disagrees with the license address means the
+    # station was away from home, so the state wins.
+    hit = CALLBOOK.position(row.get("call"), row.get("dxcc")) if CALLBOOK else None
+    if hit and (not ab or not hit[2] or hit[2] == ab):
+        return (hit[0], hit[1], "callbook")
     if ab in STATE_CENTERS:
         lat, lon = STATE_CENTERS[ab]
         return (lat, lon, "state")
@@ -1211,7 +1223,17 @@ def run_recent(session, now, args):
     for name, payload in (("recent.json", recent), ("known.json", merged)):
         size = write_json(os.path.join(OUT_DIR, name), payload)
         print(f"  wrote {OUT_DIR}/{name:12} {size:>9,} bytes")
+    save_callbook()
     return 0
+
+
+def save_callbook():
+    if CALLBOOK is None:
+        return
+    size = CALLBOOK.save()
+    if size is not None:
+        print(f"  wrote {CALLBOOK.path:24} {size:>9,} bytes"
+              f"  ({CALLBOOK.lookups} lookups this run)")
 
 
 def main():
@@ -1241,6 +1263,9 @@ def main():
     print(f"  dxcc table: {dxcc.count()} entities")
 
     session = build_session(key)
+
+    global CALLBOOK
+    CALLBOOK = Callbook()
 
     if args.mode == "recent":
         return run_recent(session, now, args)
@@ -1280,6 +1305,7 @@ def main():
                           ("recent.json", recent), ("known.json", known)):
         size = write_json(os.path.join(OUT_DIR, name), payload)
         print(f"  wrote {OUT_DIR}/{name:12} {size:>9,} bytes")
+    save_callbook()
     return 0
 
 
