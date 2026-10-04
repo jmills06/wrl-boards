@@ -778,9 +778,8 @@ def locate(row):
       state  a state or province centroid: "somewhere in Colorado"
       dxcc   an entity centroid: "somewhere in Japan"
 
-    The precision travels with the point so the board can draw an honest mark.
-    Only a grid earns an arc; a centroid gets a bubble, because an arc drawn to
-    a centroid is a line to a place nobody was standing.
+    Every source gets the same arc on the map. A centroid is an estimate, but
+    at map scale it lands close enough to tell the story of the contact.
     """
     c = grid_center(row.get("grid")) or grid_center(row.get("grid4"))
     if c:
@@ -824,7 +823,7 @@ def region_frame(origins):
 
 
 def build_map(agg, rows, bands_order):
-    """Arcs, bubbles and operating sites for the two maps.
+    """Arcs and operating sites for the two maps.
 
     Everything carries a `region` flag: true items belong on the regional map,
     false ones on the world map, which shows nothing but the DX so it is not a
@@ -846,31 +845,22 @@ def build_map(agg, rows, bands_order):
     frame = region_frame(origins)
 
     band_rank = {b: i for i, b in enumerate(bands_order)}
-    arcs, bubbles = [], {}
+    arcs = []
     for r in rows:
         pos = locate(r)
         if not pos:
             continue
-        lat, lon, prec = pos
+        lat, lon, _ = pos
         home = str(r.get("my_grid") or "").strip().upper()
+        # With no operating site at all, the endpoint still draws, just
+        # without a line back to anywhere.
         oi = index.get(home, 0 if origins else None)
-
-        if prec == "grid" and oi is not None:
-            arcs.append({
-                "o": oi,
-                "lat": round(lat, 2), "lon": round(lon, 2),
-                "band": r["band"],
-                "region": inside(frame["bbox"], lon, lat),
-            })
-        else:
-            # Many contacts share one centroid, so they are counted into a
-            # single bubble rather than stacked as identical invisible dots.
-            key = (round(lat, 2), round(lon, 2))
-            b = bubbles.setdefault(key, {
-                "lat": key[0], "lon": key[1], "count": 0,
-                "region": inside(frame["bbox"], lon, lat),
-            })
-            b["count"] += 1
+        arcs.append({
+            "o": oi,
+            "lat": round(lat, 2), "lon": round(lon, 2),
+            "band": r["band"],
+            "region": inside(frame["bbox"], lon, lat),
+        })
 
     arcs.sort(key=lambda a: band_rank.get(a["band"], len(band_rank)))
     return {
@@ -878,7 +868,6 @@ def build_map(agg, rows, bands_order):
         "frame": frame,
         "origins": origins,
         "arcs": arcs,
-        "bubbles": sorted(bubbles.values(), key=lambda b: -b["count"]),
         "bands": bands_order,
     }
 

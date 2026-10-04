@@ -360,22 +360,10 @@ function drawMap(svgId, boxId, m, wantRegion){
   drawLand(svg, path, {sphere: !wantRegion,
                       states: wantRegion && m.frame.mode === 'na'});
 
-  // Bubbles sit under the arcs: they are the approximate layer, and they are
-  // the one thing on the map that should never draw the eye first.
-  (m.bubbles||[]).forEach(function(b){
-    if(!!b.region !== wantRegion) return;
-    var p = proj([b.lon, b.lat]);
-    if(!p) return;
-    svg.appendChild(el('circle', {cx:p[0], cy:p[1],
-      r: (3.5 + Math.sqrt(b.count) * 2.4).toFixed(1),
-      fill:'rgba(253,248,229,.11)', stroke:'rgba(253,248,229,.40)', 'stroke-width':1.1}));
-  });
-
   (m.arcs||[]).forEach(function(a){
     if(!!a.region !== wantRegion) return;
     var o = (m.origins||[])[a.o];
-    if(!o) return;
-    var d = path({type:'LineString', coordinates:[[o.lon,o.lat],[a.lon,a.lat]]});
+    var d = o && path({type:'LineString', coordinates:[[o.lon,o.lat],[a.lon,a.lat]]});
     if(d){
       svg.appendChild(el('path', {d:d, fill:'none', stroke:bandColor(a.band),
         'stroke-width':1.3, 'stroke-opacity':.5, 'stroke-linecap':'round'}));
@@ -412,8 +400,7 @@ function renderMaps(m){
     ? 'North America \u00b7 last ' + m.window_days + ' days'
     : 'Around the station \u00b7 last ' + m.window_days + ' days';
 
-  var dx = (m.arcs||[]).filter(function(a){ return !a.region; }).length
-         + (m.bubbles||[]).filter(function(b){ return !b.region; }).length;
+  var dx = (m.arcs||[]).filter(function(a){ return !a.region; }).length;
   $('dxTitle').textContent = dx
     ? 'DX \u00b7 ' + dx + ' beyond the frame'
     : 'DX \u00b7 none this window';
