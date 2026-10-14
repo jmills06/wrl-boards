@@ -49,6 +49,11 @@ from callbook import Callbook
 
 # ---------------------------------------------------------------- tuning
 
+# Where a contact with no myGridsquare was made from. Logging at home often
+# leaves it blank; a full run may refine this from the log, but a recent run
+# never guesses from its own window, which a trip can dominate.
+HOME_GRID = "EN82"
+
 FRESH_DAYS = 30
 RECENT_CONTACTS = 14
 RECENT_WINDOW_DAYS = 45
@@ -834,21 +839,33 @@ def region_frame(origins):
         [round(main["lon"] + px, 2), round(min(85.0, main["lat"] + py), 2)]]}
 
 
-def build_map(agg, rows, bands_order):
+def build_map(agg, rows, bands_order, home=None):
     """Arcs and operating sites for the two maps.
 
     Everything carries a `region` flag: true items belong on the regional map,
     false ones on the world map, which shows nothing but the DX so it is not a
     smaller, worse copy of the map beside it.
+
+    home: the grid a contact with no myGridsquare was made from. Loggers at
+    the home station often leave it blank, so without this a 15-day window
+    that includes a trip would draw every home QSO from the trip's grid.
     """
-    # Operating sites, most-used first. A contact with no myGridsquare is
-    # assumed to be from the busiest site rather than dropped.
+    home = grid4(home) if home and grid_center(home) else None
+
+    def site(r):
+        mg = r.get("my_grid")
+        if grid_center(mg):
+            return str(mg).strip().upper()
+        return home
+
+    # Operating sites, most-used first. A contact with no myGridsquare and no
+    # known home is assumed to be from the busiest site rather than dropped.
     sites = {}
     for r in rows:
-        c = grid_center(r.get("my_grid"))
+        key = site(r)
+        c = grid_center(key)
         if not c:
             continue
-        key = str(r["my_grid"]).strip().upper()
         o = sites.setdefault(key, {"grid": key, "lat": round(c[0], 3),
                                    "lon": round(c[1], 3), "count": 0})
         o["count"] += 1
@@ -863,10 +880,9 @@ def build_map(agg, rows, bands_order):
         if not pos:
             continue
         lat, lon, _ = pos
-        home = str(r.get("my_grid") or "").strip().upper()
         # With no operating site at all, the endpoint still draws, just
         # without a line back to anywhere.
-        oi = index.get(home, 0 if origins else None)
+        oi = index.get(site(r), 0 if origins else None)
         arcs.append({
             "o": oi,
             "lat": round(lat, 2), "lon": round(lon, 2),
@@ -985,7 +1001,8 @@ def build_recent(agg, known=None):
         "hourly": hourly,
         "now_hour": now.hour,
         "contacts": contacts,
-        "map": build_map(agg, map_rows, bands_order),
+        "map": build_map(agg, map_rows, bands_order,
+                         home=(known or {}).get("home") or HOME_GRID),
     }
 
 
@@ -1005,9 +1022,17 @@ def build_known(agg, previous=None, source="full"):
     if previous:
         entities |= set(previous.get("entities") or ())
         grids |= set(previous.get("grids") or ())
+    # The home grid is the most-used myGridsquare over the whole log, which
+    # only a full run sees. A recent run keeps what the full run decided.
+    home = agg.home_grid() if source == "full" else None
+    if not home and previous:
+        home = previous.get("home")
+    if not home:
+        home = HOME_GRID
     return {
         "generated": agg.now.isoformat(timespec="seconds"),
         "source": source,
+        "home": home,
         "entities": sorted(entities),
         "grids": sorted(grids),
     }
@@ -1026,6 +1051,7 @@ def read_known():
         return None
     return {"entities": set(ents), "grids": set(grids),
             "generated": d.get("generated"), "source": d.get("source"),
+            "home": d.get("home"),
             "raw": d}
 
 
