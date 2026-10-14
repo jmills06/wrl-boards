@@ -49,6 +49,11 @@ from callbook import Callbook
 
 # ---------------------------------------------------------------- tuning
 
+# Where a contact with no myGridsquare was made from. Logging at home often
+# leaves it blank; a full run may refine this from the log, but a recent run
+# never guesses from its own window, which a trip can dominate.
+HOME_GRID = "EN82"
+
 FRESH_DAYS = 30
 RECENT_CONTACTS = 14
 RECENT_WINDOW_DAYS = 45
@@ -997,7 +1002,7 @@ def build_recent(agg, known=None):
         "now_hour": now.hour,
         "contacts": contacts,
         "map": build_map(agg, map_rows, bands_order,
-                         home=(known or {}).get("home") or agg.home_grid()),
+                         home=(known or {}).get("home") or HOME_GRID),
     }
 
 
@@ -1023,7 +1028,7 @@ def build_known(agg, previous=None, source="full"):
     if not home and previous:
         home = previous.get("home")
     if not home:
-        home = agg.home_grid()
+        home = HOME_GRID
     return {
         "generated": agg.now.isoformat(timespec="seconds"),
         "source": source,
